@@ -31,6 +31,7 @@ TcpSocket socketListen(port_t port)
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
 
     if ((status = getaddrinfo(NULL, port, &hints, &res)) != 0)
     {
@@ -39,6 +40,7 @@ TcpSocket socketListen(port_t port)
         return sock;
     }
 
+    res->ai_flags = 0;
     if ((sockfd = socket(res->ai_family, res->ai_socktype, res->ai_flags)) == -1)
     {
         freeaddrinfo(res);

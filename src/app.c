@@ -212,7 +212,7 @@ void logResponse(FILE *file, HttpReq *req, HttpResp *resp, TcpSocket *client)
     char path[1024];
     pathToStr(path, 1024, req->path);
     long threadID = (long)pthread_self();
-    fprintf(file, THREAD_NAME_FORMAT"%-16s %-5s %-35s | Response %d %s\n", THREAD_NAME_ARGS(threadID), client->ip, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
+    fprintf(file, THREAD_NAME_FORMAT"%-16s %-5s %-35s | %d %s\n", THREAD_NAME_ARGS(threadID), client->ip, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
 }
 
 void addEndpoint(char *path, HttpReqHandler handler)

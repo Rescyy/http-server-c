@@ -5,6 +5,7 @@
 #include "utils.h"
 #include <assert.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 void blockBuilder(HttpRespBuilder *builder);
 HttpRespBuilder *nopSetVersion(HttpRespBuilder *builder, const char *version);
@@ -266,11 +267,14 @@ HttpRespBuilder *setContent(HttpRespBuilder *builder, void *content, int content
 HttpRespBuilder *setFileContent(HttpRespBuilder *builder, const char *filePath)
 {
     assert(builder->resp.content == NULL && "The builder already has some content set");
-
     FILE *file = fopen(filePath, "r");
     if (file == NULL)
     {
-        builder->setStatus(builder, INTERNAL_SERVER_ERROR);
+        if (errno = ENOENT) {
+            builder->setStatus(builder, NOT_FOUND);
+        } else {
+            builder->setStatus(builder, INTERNAL_SERVER_ERROR);
+        }
         freeHeaders(&builder->resp.headers);
     }
     else
