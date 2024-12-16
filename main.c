@@ -54,7 +54,6 @@ HttpResp assetH(HttpReq request) {
 
 int main(int argc, char **argv)
 {
-    char port[] = "80";
     addEndpoint("/", indexH);
     addEndpoint("/stylesheet", stylesheetH);
     addEndpoint("/assets/<str>", assetH);
@@ -65,6 +64,6 @@ int main(int argc, char **argv)
     }
     else
     {
-        startApp(port);
+        startApp("2345");
     }
 }

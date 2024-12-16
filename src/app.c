@@ -109,8 +109,7 @@ void handleConnection(TcpSocket client)
     if (additionalBytes == -1)
     {
         char badRequestResponse[] = "HTTP/1.1 400 Bad Request\r\n\r\n";
-        HttpRespBuilder builder = newRespBuilder();
-        logResponse(logFile, &request, &(HttpResp){.status = 400}, &client);
+        logResponse(logFile, &request, &(HttpResp) {.status = 400}, &client);
         send(client.fd, badRequestResponse, sizeof(badRequestResponse) - 1, 0);
         return;
     }
@@ -212,10 +211,8 @@ void logResponse(FILE *file, HttpReq *req, HttpResp *resp, TcpSocket *client)
 {
     char path[1024];
     pathToStr(path, 1024, req->path);
-    char respFirstLine[1024];
-    respFirstLineStr(resp, respFirstLine, 1024);
     long threadID = (long)pthread_self();
-    fprintf(file, THREAD_NAME_FORMAT"%-16s Response to %-35s | %s", THREAD_NAME_ARGS(threadID), client->ip, path, respFirstLine);
+    fprintf(file, THREAD_NAME_FORMAT"%-16s %-5s %-35s | Response %d %s\n", THREAD_NAME_ARGS(threadID), client->ip, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
 }
 
 void addEndpoint(char *path, HttpReqHandler handler)

@@ -117,7 +117,7 @@ const char *methodToStr(HttpMethod method)
 {
     static const char get[] = "GET";
     static const char post[] = "POST";
-    static const char unknown[] = "METHOD_UNKNOWN";
+    static const char unknown[] = "UNK";
 
     switch (method)
     {

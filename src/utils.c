@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
+#include "strnstr.h"
 
 int strindex(const char *str, const char *find)
 {

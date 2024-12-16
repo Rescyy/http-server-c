@@ -31,7 +31,7 @@ const char *statusToStr(HttpStatus status)
     case INTERNAL_SERVER_ERROR:
         return internalServerError;
     default:
-        return NULL;
+        return "Unknown status";
     }
 }
 

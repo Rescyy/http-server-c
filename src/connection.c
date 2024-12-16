@@ -31,7 +31,6 @@ TcpSocket socketListen(port_t port)
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;
 
     if ((status = getaddrinfo(NULL, port, &hints, &res)) != 0)
     {
@@ -216,6 +215,6 @@ int getClientIp(int fd, char *str)
     {
         return -1;
     }
-    inet_ntop(addr.sin_family, &addr.sin_addr, str, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET, &addr.sin_addr, str, INET_ADDRSTRLEN);
     return 0;
 }
