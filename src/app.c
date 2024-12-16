@@ -29,8 +29,15 @@ static char *colorCodes[] = {
     "\x1B[34m",
     "\x1B[35m",
     "\x1B[36m",
+    "\e[1m\x1B[30m",
+    "\e[1m\x1B[31m",
+    "\e[1m\x1B[32m",
+    "\e[1m\x1B[33m",
+    "\e[1m\x1B[34m",
+    "\e[1m\x1B[35m",
+    "\e[1m\x1B[36m",
 };
-#define COLOR_RESET "\033[0m"
+#define COLOR_RESET "\e[m\033[0m"
 #define COLOR_COUNT sizeof(colorCodes) / sizeof(char *)
 #define THREAD_NAME_FORMAT "%sThread %ld " COLOR_RESET
 #define THREAD_NAME_ARGS(threadID) colorCodes[hash(&threadID, sizeof(long)) % COLOR_COUNT], threadID
@@ -212,7 +219,7 @@ void logResponse(FILE *file, HttpReq *req, HttpResp *resp, TcpSocket *client)
     char path[1024];
     pathToStr(path, 1024, req->path);
     long threadID = (long)pthread_self();
-    fprintf(file, THREAD_NAME_FORMAT"%-16s %-5s %-35s | %d %s\n", THREAD_NAME_ARGS(threadID), client->ip, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
+    fprintf(file, THREAD_NAME_FORMAT"%-16s %-5s %-50s | %d %s\n", THREAD_NAME_ARGS(threadID), client->ip, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
 }
 
 void addEndpoint(char *path, HttpReqHandler handler)
