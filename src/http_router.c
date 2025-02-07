@@ -1,4 +1,5 @@
 #include "http_router.h"
+#include "http_resp.h"
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
@@ -7,11 +8,18 @@
 static HttpResp defaultNotFoundCallback(HttpReq req)
 {
     HttpRespBuilder builder = newRespBuilder();
+    respBuilderSetStatus(&builder, NOT_FOUND);
+    HttpResp resp = respBuild(&builder);
+    return resp;
+}
+
+HttpResp htmlNotFoundCallback(HttpReq req) {
+    HttpRespBuilder builder = newRespBuilder();
     char notFoundContent[] = "<!DOCTYPE html><body><head>NOT FOUND 404</head></body>";
-    HttpResp resp = builder.setStatus(&builder, NOT_FOUND)
-    ->setContent(&builder, notFoundContent, sizeof(notFoundContent) - 1)
-    ->addHeader(&builder, "Content-Type", "text/html")
-    ->build(&builder);
+    respBuilderSetStatus(&builder, NOT_FOUND);
+    respBuilderSetContent(&builder, notFoundContent, sizeof(notFoundContent) - 1);
+    respBuilderAddHeader(&builder, "Content-Type", "text/html");
+    HttpResp resp = respBuild(&builder);
     return resp;
 }
 

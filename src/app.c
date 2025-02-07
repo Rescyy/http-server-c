@@ -1,26 +1,28 @@
-#include "app.h"
-#include "http_router.h"
-#include "connection.h"
-#include <stdlib.h>
-#include <stdio.h>
+#include <assert.h>
 #include <errno.h>
-#include <sys/socket.h>
 #include <pthread.h>
-#include <unistd.h>
-#include <string.h>
 #include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include "app.h"
+#include "connection.h"
+#include "http_router.h"
 #include "utils.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 static HttpRouter router = {.capacity = -1};
-FILE *logFile;
+static const char *logFilePath = NULL;
 void *handleConnectionThreadCall(void *arg);
 void handleConnection(TcpSocket client);
-void sendResponse(HttpResp resp, HttpReq *req, char *stackBuffer, TcpSocket *client);
+void sendResponse(HttpResp *resp, HttpReq *req, char *stackBuffer, TcpSocket *client);
 int sendAll(TcpSocket *client, void *buffer, int size);
 int recvAll(TcpSocket *client, void *buffer, int size);
-void logResponse(FILE *file, HttpReq *req, HttpResp *resp, TcpSocket *client);
+void logResponse(HttpReq *req, HttpResp *resp, TcpSocket *client);
 static char *colorCodes[] = {
     "\x1B[30m",
     "\x1B[31m",
@@ -38,13 +40,27 @@ static char *colorCodes[] = {
     "\e[1m\x1B[36m",
 };
 #define COLOR_RESET "\e[m\033[0m"
-#define COLOR_COUNT sizeof(colorCodes) / sizeof(char *)
+#define COLOR_COUNT sizeof(colorCodes) / sizeof(*colorCodes)
 #define THREAD_NAME_FORMAT "%sThread %ld " COLOR_RESET
-#define THREAD_NAME_ARGS(threadID) colorCodes[hash(&threadID, sizeof(long)) % COLOR_COUNT], threadID
+#define THREAD_NAME_ARGS(threadId) colorCodes[hash(&threadId, sizeof(long)) % COLOR_COUNT], threadId
+
+void setLogFile(const char *path)
+{
+    if (access(path, F_OK) != 0)
+    {
+        FILE *file = fopen(path, "w");
+        if (file == NULL)
+        {
+            fprintf(stderr, "Failed to open log file\n");
+            return;
+        }
+        fclose(file);
+    }
+    logFilePath = path;
+}
 
 void startApp(char *port)
 {
-    logFile = stdout;
 
     signal(SIGPIPE, SIG_IGN);
 
@@ -100,14 +116,13 @@ void *handleConnectionThreadCall(void *arg)
 
 void handleConnection(TcpSocket client)
 {
-
     char buffer[BUFFER_SIZE];
 
     int bytesReceived = recv(client.fd, buffer, BUFFER_SIZE, 0);
     if (bytesReceived == -1)
     {
-        long threadID = (long)pthread_self();
-        fprintf(stderr, THREAD_NAME_FORMAT"%-16s %s\n", THREAD_NAME_ARGS(threadID), client.ip, strerror(errno));
+        long threadId = (long)pthread_self();
+        fprintf(stderr, THREAD_NAME_FORMAT "%-16s %s\n", THREAD_NAME_ARGS(threadId), client.ip, strerror(errno));
         return;
     }
 
@@ -116,7 +131,7 @@ void handleConnection(TcpSocket client)
     if (additionalBytes == -1)
     {
         char badRequestResponse[] = "HTTP/1.1 400 Bad Request\r\n\r\n";
-        logResponse(logFile, &request, &(HttpResp) {.status = 400}, &client);
+        logResponse(&request, &(HttpResp){.status = 400}, &client);
         send(client.fd, badRequestResponse, sizeof(badRequestResponse) - 1, 0);
         return;
     }
@@ -128,31 +143,28 @@ void handleConnection(TcpSocket client)
         free(additionalBuffer);
     }
     HttpResp resp = routeReq(router, request);
-    logResponse(logFile, &request, &resp, &client);
-    sendResponse(resp, &request, buffer, &client);
+    logResponse(&request, &resp, &client);
+    sendResponse(&resp, &request, buffer, &client);
     freeResp(&resp);
     freeReq(&request);
 }
 
-/*
-    Frees response and request after sending.
-*/
-void sendResponse(HttpResp resp, HttpReq *req, char *stackBuffer, TcpSocket *client)
+void sendResponse(HttpResp *resp, HttpReq *req, char *stackBuffer, TcpSocket *client)
 {
-    int responseSize = respUntilEmptyLineStr(&resp, stackBuffer, BUFFER_SIZE);
+    int responseSize = respUntilEmptyLineStr(resp, stackBuffer, BUFFER_SIZE);
     if (responseSize > BUFFER_SIZE)
     {
         char *responseBuffer = malloc(responseSize);
-        int ssss = respUntilEmptyLineStr(&resp, responseBuffer, responseSize);
-        int result = send(client->fd, responseBuffer, responseSize, 0);
+        respUntilEmptyLineStr(resp, responseBuffer, responseSize);
+        int result = sendAll(client, responseBuffer, responseSize);
         if (result == -1)
         {
             free(responseBuffer);
             return;
         }
-        if (resp.contentLength > 0)
+        if (resp->contentLength > 0)
         {
-            result = sendAll(client, resp.content, resp.contentLength);
+            result = sendAll(client, resp->content, resp->contentLength);
             if (result == -1)
             {
                 free(responseBuffer);
@@ -168,9 +180,9 @@ void sendResponse(HttpResp resp, HttpReq *req, char *stackBuffer, TcpSocket *cli
         {
             return;
         }
-        if (resp.contentLength > 0)
+        if (resp->contentLength > 0)
         {
-            result = sendAll(client, resp.content, resp.contentLength);
+            result = sendAll(client, resp->content, resp->contentLength);
             if (result == -1)
             {
                 return;
@@ -187,8 +199,8 @@ int sendAll(TcpSocket *client, void *buffer, int size)
         int packetSize = send(client->fd, buffer + sent, MIN(size - sent, 1 << 20), 0);
         if (packetSize == -1)
         {
-            long threadID = (long)pthread_self();
-            fprintf(stderr, THREAD_NAME_FORMAT"%-16s %s\n", THREAD_NAME_ARGS(threadID), client->ip, strerror(errno));
+            long threadId = (long)pthread_self();
+            fprintf(stderr, THREAD_NAME_FORMAT "%-16s %s\n", THREAD_NAME_ARGS(threadId), client->ip, strerror(errno));
             return -1;
         }
         sent += packetSize;
@@ -205,8 +217,8 @@ int recvAll(TcpSocket *client, void *buffer, int size)
         int packetSize = recv(client->fd, buffer + received, size - received, 0);
         if (packetSize == -1)
         {
-            long threadID = (long)pthread_self();
-            fprintf(stderr, THREAD_NAME_FORMAT"%s\n", THREAD_NAME_ARGS(threadID), strerror(errno));
+            long threadId = (long)pthread_self();
+            fprintf(stderr, THREAD_NAME_FORMAT "%s\n", THREAD_NAME_ARGS(threadId), strerror(errno));
             return -1;
         }
         received += packetSize;
@@ -214,12 +226,26 @@ int recvAll(TcpSocket *client, void *buffer, int size)
     return 0;
 }
 
-void logResponse(FILE *file, HttpReq *req, HttpResp *resp, TcpSocket *client)
+void logResponse(HttpReq *req, HttpResp *resp, TcpSocket *client)
 {
     char path[1024];
     pathToStr(path, 1024, req->path);
-    long threadID = (long)pthread_self();
-    fprintf(file, THREAD_NAME_FORMAT"%-16s %-5s %-50s | %d %s\n", THREAD_NAME_ARGS(threadID), client->ip, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
+    long threadId = (long)pthread_self();
+    FILE *file = NULL;
+    if (logFilePath != NULL)
+    {
+        FILE *file = fopen(logFilePath, "a");
+        if (file == NULL)
+        {
+            return;
+        }
+        fprintf(file, "Thread %ld %-16s %-5s %-50s | %d %s\n", threadId, client->ip, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
+        fclose(file);
+    }
+    else
+    {
+        printf(THREAD_NAME_FORMAT "%-16s %-5s %-50s | %d %s\n", THREAD_NAME_ARGS(threadId), client->ip, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
+    }
 }
 
 void addEndpoint(char *path, HttpReqHandler handler)

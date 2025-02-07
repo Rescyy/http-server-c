@@ -32,12 +32,6 @@ typedef enum HttpContentType
 
 typedef struct HttpRespBuilder {
     HttpResp resp;
-    struct HttpRespBuilder * (*setVersion)(struct HttpRespBuilder *, const char *);
-    struct HttpRespBuilder * (*setStatus)(struct HttpRespBuilder *, HttpStatus);
-    struct HttpRespBuilder * (*addHeader)(struct HttpRespBuilder *, char *, char *);
-    struct HttpRespBuilder * (*setContent)(struct HttpRespBuilder *, void *, int);
-    struct HttpRespBuilder * (*setFileContent)(struct HttpRespBuilder *, const char *);
-    HttpResp (*build)(struct HttpRespBuilder *);
     int headersCapacity;
 } HttpRespBuilder;
 
@@ -46,8 +40,15 @@ HttpStatus strnToStatus(const char *str, int n);
 int respToStr(HttpResp resp, char *str, int size);
 int respFirstLineStr(HttpResp *resp, char *str, int size);
 int respUntilEmptyLineStr(HttpResp *resp, char *str, int size);
-HttpRespBuilder newRespBuilder();
 int respEq(HttpResp obj1, HttpResp obj2);
 void freeResp(HttpResp *resp);
+
+HttpRespBuilder newRespBuilder();
+void respBuilderSetStatus(HttpRespBuilder *builder, HttpStatus status);
+void respBuilderSetVersion(HttpRespBuilder *builder, const char *version);
+void respBuilderAddHeader(HttpRespBuilder *builder, char *key, char *value);
+void respBuilderSetContent(HttpRespBuilder *builder, void *content, int contentLength);
+void respBuilderSetFileContent(HttpRespBuilder *builder, const char *path);
+HttpResp respBuild(HttpRespBuilder *builder);
 
 #endif

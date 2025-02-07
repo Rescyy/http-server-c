@@ -7,13 +7,6 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-void blockBuilder(HttpRespBuilder *builder);
-HttpRespBuilder *nopSetVersion(HttpRespBuilder *builder, const char *version);
-HttpRespBuilder *nopSetStatus(HttpRespBuilder *builder, HttpStatus status);
-HttpRespBuilder *nopAddHeader(HttpRespBuilder *builder, char *key, char *value);
-HttpRespBuilder *nopSetContent(HttpRespBuilder *builder, void *content, int length);
-HttpRespBuilder *nopSetFileContent(HttpRespBuilder *builder, const char *filePath);
-
 const char *statusToStr(HttpStatus status)
 {
     static const char ok[] = "OK";
@@ -49,6 +42,7 @@ HttpStatus strnToStatus(const char *str, int n)
 #undef IS_STATUS
 }
 
+/* returns size of string */
 int respToStr(HttpResp resp, char *str, int size)
 {
     if (resp.status == STATUS_UNKNOWN)
@@ -74,11 +68,13 @@ int respToStr(HttpResp resp, char *str, int size)
     return bytes + resp.contentLength;
 }
 
+/* returns size of string */
 int respFirstLineStr(HttpResp *resp, char *str, int size)
 {
     return snprintf(str, size, "%s %d %s\r\n", resp->version, resp->status, statusToStr(resp->status));
 }
 
+/* returns size of string */
 int respUntilEmptyLineStr(HttpResp *resp, char *str, int size)
 {
     int bytes = 0;
@@ -91,17 +87,15 @@ int respUntilEmptyLineStr(HttpResp *resp, char *str, int size)
     return bytes;
 }
 
-HttpRespBuilder *setVersion(HttpRespBuilder *builder, const char *version)
+void respBuilderSetVersion(HttpRespBuilder *builder, const char *version)
 {
     builder->resp.version = malloc(strlen(version) + 1);
     strcpy(builder->resp.version, version);
-    return builder;
 }
 
-HttpRespBuilder *setStatus(HttpRespBuilder *builder, HttpStatus status)
+void respBuilderSetStatus(HttpRespBuilder *builder, HttpStatus status)
 {
     builder->resp.status = status;
-    return builder;
 }
 
 void verifyHeader(HttpHeader header)
@@ -227,7 +221,7 @@ void addHeader(HttpRespBuilder *builder, char *key, char *value)
     headers->arr[headers->count++] = header;
 }
 
-HttpRespBuilder *addHeaderVerify(HttpRespBuilder *builder, char *key, char *value)
+void respBuilderAddHeader(HttpRespBuilder *builder, char *key, char *value)
 {
     verifyHeader((HttpHeader){key, value});
 
@@ -250,30 +244,28 @@ HttpRespBuilder *addHeaderVerify(HttpRespBuilder *builder, char *key, char *valu
     }
 
     headers->arr[headers->count++] = header;
-    return builder;
 }
 
-HttpRespBuilder *setContent(HttpRespBuilder *builder, void *content, int contentLength)
+void respBuilderSetContent(HttpRespBuilder *builder, void *content, int contentLength)
 {
     assert(builder->resp.content == NULL && "The builder already has some content set");
 
     builder->resp.content = malloc(contentLength);
     memcpy(builder->resp.content, content, contentLength);
     builder->resp.contentLength = contentLength;
-    return builder;
 }
 
 /* Read only files please */
-HttpRespBuilder *setFileContent(HttpRespBuilder *builder, const char *filePath)
+void respBuilderSetFileContent(HttpRespBuilder *builder, const char *filePath)
 {
     assert(builder->resp.content == NULL && "The builder already has some content set");
     FILE *file = fopen(filePath, "r");
     if (file == NULL)
     {
-        if (errno = ENOENT) {
-            builder->setStatus(builder, NOT_FOUND);
+        if (errno == ENOENT) {
+            respBuilderSetStatus(builder, NOT_FOUND);
         } else {
-            builder->setStatus(builder, INTERNAL_SERVER_ERROR);
+            respBuilderSetStatus(builder, INTERNAL_SERVER_ERROR);
         }
         freeHeaders(&builder->resp.headers);
     }
@@ -288,11 +280,9 @@ HttpRespBuilder *setFileContent(HttpRespBuilder *builder, const char *filePath)
         builder->resp.content = content;
         builder->resp.contentLength = size;
     }
-
-    return builder;
 }
 
-HttpResp build(HttpRespBuilder *builder)
+HttpResp respBuild(HttpRespBuilder *builder)
 {
     int contentLength = builder->resp.contentLength;
     if (contentLength > 0)
@@ -304,7 +294,7 @@ HttpResp build(HttpRespBuilder *builder)
     }
     if (findHeader(builder->resp.headers, "Server") == NULL)
     {
-        builder->addHeader(builder, "Server", "http-server-c");
+        respBuilderAddHeader(builder, "Server", "http-server-c");
     }
     if (builder->resp.status == STATUS_UNKNOWN)
     {
@@ -326,24 +316,9 @@ HttpRespBuilder newRespBuilder()
             .content = NULL,
             .contentLength = 0,
         },
-        .setVersion = setVersion,
-        .setStatus = setStatus,
-        .addHeader = addHeaderVerify,
-        .setContent = setContent,
-        .setFileContent = setFileContent,
-        .build = build,
         .headersCapacity = 0,
     };
     return builder;
-}
-
-void blockBuilder(HttpRespBuilder *builder)
-{
-    builder->setVersion = nopSetVersion;
-    builder->setStatus = nopSetStatus;
-    builder->addHeader = nopAddHeader;
-    builder->setContent = nopSetContent;
-    builder->setFileContent = nopSetFileContent;
 }
 
 int respEq(HttpResp obj1, HttpResp obj2)
@@ -376,29 +351,4 @@ void freeResp(HttpResp *resp)
     free(resp->version);
     freeHeaders(&resp->headers);
     free(resp->content);
-}
-
-HttpRespBuilder *nopSetVersion(HttpRespBuilder *builder, const char *version)
-{
-    return builder;
-}
-
-HttpRespBuilder *nopSetStatus(HttpRespBuilder *builder, HttpStatus status)
-{
-    return builder;
-}
-
-HttpRespBuilder *nopAddHeader(HttpRespBuilder *builder, char *key, char *value)
-{
-    return builder;
-}
-
-HttpRespBuilder *nopSetContent(HttpRespBuilder *builder, void *content, int length)
-{
-    return builder;
-}
-
-HttpRespBuilder *nopSetFileContent(HttpRespBuilder *builder, const char *filePath)
-{
-    return builder;
 }

@@ -13,5 +13,6 @@ typedef HttpResp (*HttpReqHandler) (HttpReq);
 void startApp(char* port);
 void addEndpoint(char *path, HttpReqHandler handler);
 void setNotFoundCallback(HttpReqHandler handler);
+void setLogFile(const char *path);
 
 #endif

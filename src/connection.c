@@ -58,10 +58,6 @@ TcpSocket socketListen(port_t port)
         return sock;
     }
 
-    for (int i = 0; i < sizeof(*res->ai_addr); i++) {
-        printf("%d ", ((char *)res->ai_addr)[i]);
-    }
-    printf("\n");
     if ((status = bind(sockfd, res->ai_addr, res->ai_addrlen)) == -1)
     {
         freeaddrinfo(res);

@@ -337,10 +337,11 @@ int respBuilderTest()
         "Hello",
         5};
     HttpRespBuilder builder = newRespBuilder();
-    builder.setVersion(&builder, "HTTP/1.1")
-        ->setStatus(&builder, OK)
-        ->setContent(&builder, "Hello", 5);
-    HttpResp builtResp = builder.build(&builder);
+    respBuilderSetVersion(&builder, "HTTP/1.1");
+    respBuilderSetStatus(&builder, OK);
+    respBuilderSetContent(&builder, "Hello", 5);
+
+    HttpResp builtResp = respBuild(&builder);
     EXPECT(respEq(resp, builtResp) == 1);
     freeResp(&builtResp);
 
@@ -408,8 +409,8 @@ int setFileContentTest()
     fclose(fopen("test.txt", "w"));
 
     HttpRespBuilder builder = newRespBuilder();
-    builder.setFileContent(&builder, "test.txt");
-    HttpResp resp = builder.build(&builder);
+    respBuilderSetFileContent(&builder, "test.txt");
+    HttpResp resp = respBuild(&builder);
     HttpResp expectedResp = {
         "HTTP/1.1",
         OK,
