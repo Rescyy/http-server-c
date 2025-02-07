@@ -1,5 +1,4 @@
 #include "src/app.h"
-#include "src/http_resp.h"
 
 HttpResp indexH(HttpReq);
 HttpResp stylesheetH(HttpReq);
@@ -20,7 +19,7 @@ int main(int argc, char **argv)
     }
     else
     {
-        startApp("80");
+        startApp("8080");
     }
 }
 
