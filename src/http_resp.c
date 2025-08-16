@@ -240,7 +240,7 @@ int respToStr(HttpResp resp, char *str, int size)
         return -1;
     }
     int bytes = 0;
-    bytes += respFirstLineStr(&resp, str + bytes, size - bytes);
+    bytes += buildRespStringFirstLineStr(&resp, str + bytes, size - bytes);
     for (int i = 0; i < resp.headers.count; i++)
     {
         bytes += snprintf(str + bytes, size - bytes, "%s: %s\r\n", resp.headers.arr[i].key, resp.headers.arr[i].value);
@@ -259,7 +259,7 @@ int respToStr(HttpResp resp, char *str, int size)
 }
 
 /* returns size of string */
-int respFirstLineStr(HttpResp *resp, char *str, int size)
+int buildRespStringFirstLineStr(HttpResp *resp, char *str, int size)
 {
     char *version = resp->version;
     if (version == NULL)
@@ -270,10 +270,10 @@ int respFirstLineStr(HttpResp *resp, char *str, int size)
 }
 
 /* returns size of string */
-int respUntilEmptyLineStr(HttpResp *resp, char *str, int size)
+int buildRespStringUntilContent(HttpResp *resp, char *str, int size)
 {
     int bytes = 0;
-    bytes += respFirstLineStr(resp, str, size);
+    bytes += buildRespStringFirstLineStr(resp, str, size);
     for (int i = 0; i < resp->headers.count; i++)
     {
         bytes += snprintf(str + bytes, size - bytes, "%s: %s\r\n", resp->headers.arr[i].key, resp->headers.arr[i].value);
@@ -454,8 +454,8 @@ void respBuilderSetContent(HttpRespBuilder *builder, void *content, int contentL
 void respBuilderSetFileContent(HttpRespBuilder *builder, const char *filePath)
 {
     assert(builder->resp.content == NULL && "The builder already has some content set");
-    FILE *file = fopen(filePath, "r");
-    if (file == NULL)
+    struct stat st;
+    if (stat(filePath, &st))
     {
         if (errno == ENOENT)
         {
@@ -469,12 +469,11 @@ void respBuilderSetFileContent(HttpRespBuilder *builder, const char *filePath)
     }
     else
     {
-        struct stat st;
-        stat(filePath, &st);
-        int size = st.st_size;
-        char *content = allocate(size);
-        fread(content, 1, size, file);
-        fclose(file);
+        size_t size = st.st_size;
+        size_t pathSize = strlen(filePath);
+        char *content = malloc(pathSize + 1);
+        strncpy(content, filePath, pathSize);
+        builder->resp.isContentFile = 1;
         builder->resp.content = content;
         builder->resp.contentLength = size;
     }
@@ -510,6 +509,7 @@ HttpRespBuilder newRespBuilder()
             .headers = (HttpHeaders){NULL, 0},
             .content = NULL,
             .contentLength = 0,
+            .isContentFile = 0,
         },
         .headersCapacity = 0,
     };

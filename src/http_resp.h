@@ -81,7 +81,8 @@ typedef struct HttpResp {
     HttpStatus status;
     HttpHeaders headers;
     void *content;
-    int contentLength;
+    size_t contentLength;
+    int isContentFile;
 } HttpResp;
 
 typedef enum HttpMimeType
@@ -99,8 +100,8 @@ typedef struct HttpRespBuilder {
 const char *statusToStr(HttpStatus status);
 HttpStatus strnToStatus(const char *str, int n);
 int respToStr(HttpResp resp, char *str, int size);
-int respFirstLineStr(HttpResp *resp, char *str, int size);
-int respUntilEmptyLineStr(HttpResp *resp, char *str, int size);
+int buildRespStringFirstLineStr(HttpResp *resp, char *str, int size);
+int buildRespStringUntilContent(HttpResp *resp, char *str, int size);
 int respEq(HttpResp obj1, HttpResp obj2);
 void freeResp(HttpResp *resp);
 

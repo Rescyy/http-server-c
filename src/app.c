@@ -9,9 +9,13 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <stdlib.h>
+#include <fcntl.h>
 
 #include "alloc.h"
 #include "app.h"
+
+#include <errno.h>
+
 #include "app_state.h"
 #include "connection.h"
 #include "http_router.h"
@@ -26,9 +30,13 @@ void *handleConnectionThreadCall(void *arg);
 
 void handleConnection(SessionState *appState);
 
-void sendResponse(HttpResp *resp, TcpSocket *client);
+int sendResponse(HttpResp *resp, TcpSocket *client);
 
-int sendAll(TcpSocket *client, void *buffer, int size);
+int sendContent(HttpResp *resp, TcpSocket *client);
+
+int sendFile(HttpResp *resp, TcpSocket *client);
+
+int sendAll(TcpSocket *client, void *buffer, size_t size);
 
 int handleError(int result, TcpSocket *client, HttpReq *request);
 
@@ -116,6 +124,8 @@ int handleRequest(SessionState *appState, TcpStream *stream) {
             break;
     }
 
+    int connectionKeepAlive = isConnectionKeepAlive(&request);
+
     resp = routeReq(router, request);
 
     logResponse(&resp, &request);
@@ -124,9 +134,9 @@ int handleRequest(SessionState *appState, TcpStream *stream) {
     freeResp(&resp);
     freeReq(&request);
 
-    tcpStreamDrain(&stream);
+    tcpStreamDrain(stream);
 
-    return isConnectionKeepAlive(&request);
+    return connectionKeepAlive;
 }
 
 /*
@@ -163,39 +173,73 @@ int handleError(int result, TcpSocket *client, HttpReq *request) {
     return 2;
 }
 
-void sendResponse(HttpResp *resp, TcpSocket *client) {
+int sendResponse(HttpResp *resp, TcpSocket *client) {
     char stackBuffer[BUFFER_SIZE];
-    int responseSize = respUntilEmptyLineStr(resp, stackBuffer, BUFFER_SIZE);
+    int responseSize = buildRespStringUntilContent(resp, stackBuffer, BUFFER_SIZE);
     if (responseSize > BUFFER_SIZE) {
+        /* if stackBuffer not big enough */
         char *responseBuffer = allocate(responseSize);
-        respUntilEmptyLineStr(resp, responseBuffer, responseSize);
+        buildRespStringUntilContent(resp, responseBuffer, responseSize);
         int result = sendAll(client, responseBuffer, responseSize);
         if (result == -1) {
             deallocate(responseBuffer);
-            return;
+            return -1;
         }
-        if (resp->contentLength > 0) {
-            result = sendAll(client, resp->content, resp->contentLength);
-        }
+        result = sendContent(resp, client);
         deallocate(responseBuffer);
+        if (result == -1) {
+            return -1;
+        }
     } else {
         int result = sendAll(client, stackBuffer, responseSize);
         if (result == -1) {
-            return;
+            return -1;
         }
-        if (resp->contentLength > 0) {
-            result = sendAll(client, resp->content, resp->contentLength);
-            if (result == -1) {
-                return;
-            }
+        result = sendContent(resp, client);
+        if (result == -1) {
+            return -1;
         }
     }
+    return 0;
 }
 
-int sendAll(TcpSocket *client, void *buffer, int size) {
-    int sent = 0;
+int sendContent(HttpResp *resp, TcpSocket *client) {
+    if (resp->isContentFile) {
+        return sendFile(resp, client);
+    }
+    if (resp->contentLength > 0) {
+        return sendAll(client, resp->content, resp->contentLength);
+    }
+    return 0;
+}
+
+int sendFile(HttpResp *resp, TcpSocket *client) {
+    int fd = open(resp->content, O_RDONLY);
+    if (fd < 0) {
+        return -1;
+    }
+
+    off_t offset = 0;
+    off_t remaining = resp->contentLength;
+
+    while (remaining > 0) {
+        off_t len = remaining;   // request this many
+        if (sendfile(fd, client->fd, offset, &len, NULL, 0) < 0) {
+            return -1;
+        }
+        if (len == 0) {
+            break;
+        }
+        offset    += len;
+        remaining -= len;
+    }
+    return 0;
+}
+
+int sendAll(TcpSocket *client, void *buffer, size_t size) {
+    size_t sent = 0;
     while (sent < size) {
-        int packetSize = send(client->fd, buffer + sent, MIN(size - sent, 1 << 20), 0);
+        ssize_t packetSize = send(client->fd, buffer + sent, MIN(size - sent, 1 << 20), 0);
         if (packetSize == -1) {
             return -1;
         }
