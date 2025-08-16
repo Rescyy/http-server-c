@@ -1,0 +1,5 @@
+leaks.txt
+allocations.txt
+cmake-build-debug
+*.iml
+*/.gitignore
