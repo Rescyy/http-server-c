@@ -11,6 +11,13 @@
 typedef enum HttpMethod {
     GET,
     POST,
+    PATCH,
+    PUT,
+    DELETE,
+    HEAD,
+    OPTIONS,
+    TRACE,
+    CONNECT,
     METHOD_UNKNOWN = -1,
 } HttpMethod;
 

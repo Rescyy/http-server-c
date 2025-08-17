@@ -143,16 +143,37 @@ const char *methodToStr(HttpMethod method)
 {
     static const char get[] = "GET";
     static const char post[] = "POST";
+    static const char patch[] = "PATCH";
+    static const char put[] = "PUT";
+    static const char delete[] = "DELETE";
+    static const char head[] = "HEAD";
+    static const char options[] = "OPTIONS";
+    static const char trace[] = "TRACE";
+    static const char connect[] = "CONNECT";
     static const char unknown[] = "UNK";
 
     switch (method)
     {
-    case GET:
-        return get;
-    case POST:
-        return post;
-    default:
-        return unknown;
+        case GET:
+            return get;
+        case POST:
+            return post;
+        case PATCH:
+            return patch;
+        case PUT:
+            return put;
+        case DELETE:
+            return delete;
+        case HEAD:
+            return head;
+        case OPTIONS:
+            return options;
+        case TRACE:
+            return trace;
+        case CONNECT:
+            return connect;
+        default:
+            return unknown;
     }
 }
 
@@ -165,6 +186,13 @@ HttpMethod strnToMethod(const char *str, int n)
     return (method)
     IS_METHOD(GET);
     IS_METHOD(POST);
+    IS_METHOD(PATCH);
+    IS_METHOD(PUT);
+    IS_METHOD(DELETE);
+    IS_METHOD(HEAD);
+    IS_METHOD(OPTIONS);
+    IS_METHOD(TRACE);
+    IS_METHOD(CONNECT);
     return METHOD_UNKNOWN;
 #undef IS_METHOD
 }

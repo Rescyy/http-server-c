@@ -82,7 +82,7 @@ int tcpStreamWaitTimeout(TcpStream *stream, int timeout)
 
 #define MIN_FILL_SIZE 1024
 
-void tcpStreamFill(TcpStream *stream, int length)
+void tcpStreamFill(TcpStream *stream, size_t length)
 {
     if (stream->length >= length)
     {
@@ -119,9 +119,9 @@ void tcpStreamFill(TcpStream *stream, int length)
         If the user needs more bytes than MIN_FILL_SIZE, then it will receive that
         amount of bytes directly.
         */
-        int maxReadSize = MAX(length - stream->length, MIN_FILL_SIZE);
-        int minReadSize = MIN(stream->capacity - stream->length, maxReadSize);
-        int result = recv(
+        const size_t maxReadSize = MAX(length - stream->length, MIN_FILL_SIZE);
+        const size_t minReadSize = MIN(stream->capacity - stream->length, maxReadSize);
+        ssize_t result = recv(
             stream->fd,
             stream->buffer + stream->length,
             minReadSize,
@@ -136,7 +136,7 @@ void tcpStreamFill(TcpStream *stream, int length)
     }
 }
 
-void tcpStreamRead(TcpStream *stream, void *buffer, int size)
+void tcpStreamRead(TcpStream *stream, void *buffer, size_t size)
 {
     tcpStreamFill(stream, stream->cursor + size);
     if (stream->error != 0)
@@ -148,7 +148,7 @@ void tcpStreamRead(TcpStream *stream, void *buffer, int size)
     memcpy(buffer, stream->buffer + start, size);
 }
 
-void *tcpStreamReadSlice(TcpStream *stream, int size)
+void *tcpStreamReadSlice(TcpStream *stream, size_t size)
 {
     tcpStreamFill(stream, stream->cursor + size);
     if (stream->error != 0)
@@ -174,17 +174,32 @@ char tcpStreamGetc(TcpStream *stream)
     return stream->buffer[stream->cursor++];
 }
 
-char tcpStreamIndex(TcpStream *stream, int index)
+char tcpStreamIndex(TcpStream *stream, size_t index)
 {
     tcpStreamFill(stream, index + 1);
     return stream->buffer[index];
 }
 
-string tcpStreamReadUntilSpace(TcpStream *stream, int maxLength)
+string tcpStreamReadUntilSpace(TcpStream *stream, size_t maxLength)
 {
-    int start = stream->cursor;
-    while (tcpStreamGetc(stream) != ' ')
-    {
+    const size_t start = stream->cursor;
+    size_t check = MIN(stream->length - stream->cursor, maxLength);
+    for (; stream->cursor <= start + check; stream->cursor++) {
+        if (stream->buffer[stream->cursor] == ' ') {
+            const string result = (string) {
+                .ptr = stream->buffer + start,
+                .length = stream->cursor - start,
+            };
+            stream->cursor++;
+            return result;
+        }
+    }
+    for (;;) {
+        if (stream->cursor > start + maxLength)
+        {
+            return (string){.ptr = NULL, .length = ENTITY_TOO_LARGE_ERROR};
+        }
+        tcpStreamFill(stream, maxLength);
         if (stream->error == TCP_STREAM_CLOSED)
         {
             return (string){.ptr = NULL, .length = TCP_STREAM_CLOSED};
@@ -193,19 +208,21 @@ string tcpStreamReadUntilSpace(TcpStream *stream, int maxLength)
         {
             return (string){.ptr = NULL, .length = TCP_STREAM_ERROR};
         }
-        if (stream->cursor - start > maxLength)
-        {
-            return (string){.ptr = NULL, .length = ENTITY_TOO_LARGE_ERROR};
+        check = MIN(stream->length - stream->cursor, maxLength);
+        for (; stream->cursor < start + check; stream->cursor++) {
+            if (stream->buffer[stream->cursor] == ' ') {
+                const string result = (string) {
+                    .ptr = stream->buffer + start,
+                    .length = stream->cursor - start,
+                };
+                stream->cursor++;
+                return result;
+            }
         }
     }
-
-    return (string){
-        .ptr = stream->buffer + start,
-        .length = stream->cursor - start - 1,
-    };
 }
 
-string tcpStreamReadUntilCRLF(TcpStream *stream, int maxLength, int ignoreLoneCRLF)
+string tcpStreamReadUntilCRLF(TcpStream *stream, size_t maxLength, int ignoreLoneCRLF)
 {
     int start = stream->cursor;
 
@@ -239,7 +256,7 @@ string tcpStreamReadUntilCRLF(TcpStream *stream, int maxLength, int ignoreLoneCR
     }
 }
 
-string tcpStreamReadUntilString(TcpStream *stream, int maxLength, const char *subStr, int size)
+string tcpStreamReadUntilString(TcpStream *stream, size_t maxLength, const char *subStr, size_t size)
 {
     assert(size > 0);
     int start = stream->cursor;
@@ -272,7 +289,7 @@ string tcpStreamReadUntilString(TcpStream *stream, int maxLength, const char *su
 
 int tcpStreamHasError(TcpStream *stream)
 {
-    int error = stream->error;
+    const int error = stream->error;
     stream->error = 0;
     return error != 0;
 }

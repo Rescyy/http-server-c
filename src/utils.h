@@ -10,7 +10,7 @@
 
 typedef struct string {
     char *ptr;
-    int length;
+    size_t length;
 } string;
 
 char *strnstr(const char *s, const char *find, size_t slen);

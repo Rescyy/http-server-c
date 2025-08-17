@@ -67,12 +67,11 @@ void logResponse(HttpResp *resp, HttpReq *req)
     char path[1024];
     pathToStr(path, 1024, req->path);
     long threadId = (long)pthread_self();
-    FILE *file = NULL;
     char *clientIp = req->appState->clientSocket.ip;
     unsigned long connectionIndex = req->appState->connectionIndex;
     if (logFlags & PRINT_LOG)
     {
-        printf(CONNECTION_NAME_FORMAT " " THREAD_NAME_FORMAT " %-16s %-5s %-50s | %d %s\n", connectionIndex, THREAD_NAME_ARGS(threadId), clientIp, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
+        printf(CONNECTION_NAME_FORMAT " " THREAD_NAME_FORMAT " %-16s %-7s %-50s | %d %s\n", connectionIndex, THREAD_NAME_ARGS(threadId), clientIp, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
     }
     if (logFlags & FILE_LOG)
     {
@@ -81,7 +80,7 @@ void logResponse(HttpResp *resp, HttpReq *req)
         {
             return;
         }
-        fprintf(file, CONNECTION_NAME_FORMAT " Thread %ld %-16s %-5s %-50s | %d %s\n", connectionIndex, threadId, clientIp, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
+        fprintf(file, CONNECTION_NAME_FORMAT " Thread %ld %-16s %-7s %-50s | %d %s\n", connectionIndex, threadId, clientIp, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
         fclose(file);
     }
 }
@@ -91,12 +90,11 @@ void logError(HttpReq *req, const char *error)
     char path[1024];
     pathToStr(path, 1024, req->path);
     long threadId = (long)pthread_self();
-    FILE *file = NULL;
     char *clientIp = req->appState->clientSocket.ip;
     unsigned long connectionIndex = req->appState->connectionIndex;
     if (logFlags & PRINT_LOG)
     {
-        printf(CONNECTION_NAME_FORMAT " " THREAD_NAME_FORMAT " %-16s %-5s %-50s | Error: %s\n", connectionIndex, THREAD_NAME_ARGS(threadId), clientIp, methodToStr(req->method), path, error);
+        printf(CONNECTION_NAME_FORMAT " " THREAD_NAME_FORMAT " %-16s %-7s %-50s | Error: %s\n", connectionIndex, THREAD_NAME_ARGS(threadId), clientIp, methodToStr(req->method), path, error);
     }
     if (logFlags & FILE_LOG)
     {
@@ -105,7 +103,7 @@ void logError(HttpReq *req, const char *error)
         {
             return;
         }
-        fprintf(file, CONNECTION_NAME_FORMAT " Thread %ld %-16s %-5s %-50s | Error: %s\n", threadId, clientIp, methodToStr(req->method), path, error);
+        fprintf(file, CONNECTION_NAME_FORMAT " Thread %ld %-16s %-7s %-50s | Error: %s\n", connectionIndex, threadId, clientIp, methodToStr(req->method), path, error);
         fclose(file);
     }
 }
