@@ -77,23 +77,27 @@ static const MimeMapping mime_mappings[] = {
 
 static const size_t mime_mappings_count = sizeof(mime_mappings) / sizeof(mime_mappings[0]);
 
-char *get_extension(const char *filename) {
+char *getExtension(const char *filename) {
     if (filename == NULL) {
         return NULL;
     }
-    return strrchr(filename, '.');
+    char *last = strrchr(filename, '.');
+    if (last == NULL) {
+        return NULL;
+    }
+    return last + 1;
 }
 
-// Example lookup function
-const char* get_mime_type(const char *ext) {
-    const char *defaultMimeType = "application/octet-stream";
+const char *defaultMimeType = "application/octet-stream";
 
-    if (ext == NULL) {
+// Example lookup function
+const char* getMimeType(const char *extension) {
+    if (extension == NULL) {
         return defaultMimeType;
     }
 
     for (size_t i = 0; i < mime_mappings_count; i++) {
-        if (strcmp(ext, mime_mappings[i].ext) == 0) {
+        if (strcmp(extension, mime_mappings[i].ext) == 0) {
             return mime_mappings[i].mime;
         }
     }

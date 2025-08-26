@@ -21,7 +21,6 @@ int main(int argc, char **argv)
     addEndpoint("/stylesheet", stylesheetH);
     addEndpoint("/assets/<str>", assetH);
     setLogFile("hello.txt");
-    setLogFlags(JSON_LOG);
     setNotFoundCallback(notFoundH);
 
     if (argc == 2)

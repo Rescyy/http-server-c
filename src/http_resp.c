@@ -3,11 +3,13 @@
 //
 
 #include "http_resp.h"
+#include "file_handler.h"
+#include "alloc.h"
+#include "utils.h"
+
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "alloc.h"
-#include "utils.h"
 #include <assert.h>
 #include <sys/stat.h>
 #include <errno.h>
@@ -383,7 +385,7 @@ void addHeaderImposing(HttpRespBuilder *builder, char *key, char *value)
     headers->arr[headers->count++] = header;
 }
 
-void addHeader(HttpRespBuilder *builder, char *key, char *value)
+void addHeader(HttpRespBuilder *builder, const char *key, const char *value)
 {
     HttpHeaders *headers = &builder->resp.headers;
 
@@ -487,12 +489,15 @@ HttpResp respBuild(HttpRespBuilder *builder)
         char contentLengthStr[16];
         snprintf(contentLengthStr, 16, "%d", contentLength);
         addHeader(builder, "Content-Length", contentLengthStr);
-        addHeader(builder, "Content-Type", "text/plain"); /*will not overwrite Content-Type*/
+        if (builder->resp.isContentFile) {
+            const char *extension = getExtension(builder->resp.content);
+            const char *mimeType = getMimeType(extension);
+            addHeader(builder, "Content-Type", mimeType);
+        } else {
+            addHeader(builder, "Content-Type", defaultMimeType);
+        }
     }
-    if (findHeader(builder->resp.headers, "Server") == NULL)
-    {
-        respBuilderAddHeader(builder, "Server", "http-server-c");
-    }
+    addHeader(builder, "Server", "http-server-c");
     if (builder->resp.status == STATUS_UNKNOWN)
     {
         builder->resp.status = OK;
