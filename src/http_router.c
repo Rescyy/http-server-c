@@ -9,7 +9,7 @@
 #include <string.h>
 #include <stdio.h>
 
-static HttpResp defaultNotFoundCallback(HttpReq req)
+static HttpResp defaultNotFoundCallback(HttpReq _)
 {
     HttpRespBuilder builder = newRespBuilder();
     respBuilderSetStatus(&builder, NOT_FOUND);
@@ -17,7 +17,7 @@ static HttpResp defaultNotFoundCallback(HttpReq req)
     return resp;
 }
 
-HttpResp htmlNotFoundCallback(HttpReq req) {
+HttpResp htmlNotFoundCallback(HttpReq _) {
     HttpRespBuilder builder = newRespBuilder();
     char notFoundContent[] = "<!DOCTYPE html><body><head>NOT FOUND 404</head></body>";
     respBuilderSetStatus(&builder, NOT_FOUND);

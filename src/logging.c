@@ -40,23 +40,18 @@ static int logFlags = PRINT_LOG;
  */
 void setLogFile(const char *path)
 {
-    if (access(path, F_OK) != 0)
-    {
-        fprintf(stderr, "Couldn't find log file: %s\n", path);
-        return;
+    FILE *file = fopen(path, "a");
+    if (file == NULL) {
+        fprintf(stderr, "Could not open log file %s\n", path);
     }
-    if (access(path, W_OK) != 0)
-    {
-        fprintf(stderr, "Failed to use log file: %s\n", path);
-        return;
-    }
+    fclose(file);
     logFilePath = path;
     logFlags |= FILE_LOG;
 }
 
 void setLogFlags(int flags)
 {
-    if ((flags | FILE_LOG) && logFilePath == NULL) {
+    if ((flags | FILE_LOG | JSON_LOG) && logFilePath == NULL) {
         fprintf(stderr, "Before setting the FILE_LOG flag, set a log file.\n");
     }
     logFlags = flags;
@@ -73,14 +68,25 @@ void logResponse(HttpResp *resp, HttpReq *req)
     {
         printf(CONNECTION_NAME_FORMAT " " THREAD_NAME_FORMAT " %-16s %-7s %-50s | %d %s\n", connectionIndex, THREAD_NAME_ARGS(threadId), clientIp, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
     }
-    if (logFlags & FILE_LOG)
-    {
+    if (logFlags & JSON_LOG) {
         FILE *file = fopen(logFilePath, "a");
-        if (file == NULL)
-        {
+        if (file == NULL) {
             return;
         }
-        fprintf(file, CONNECTION_NAME_FORMAT " Thread %ld %-16s %-7s %-50s | %d %s\n", connectionIndex, threadId, clientIp, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
+        char *buffer;
+        JObject reqObj = httpReqToJObject(req);
+        JToken reqToken = _JToken(reqObj);
+        unsigned int size = serializeJson(reqToken, &buffer, 4);
+        fwrite(buffer, size, 1, file);
+        fclose(file);
+        freeHttpReqJObject(&reqObj);
+    } else if (logFlags & FILE_LOG) {
+        FILE *file = fopen(logFilePath, "a");
+        if (file == NULL) {
+            return;
+        }
+        fprintf(file, CONNECTION_NAME_FORMAT " Thread %ld %-16s %-7s %-50s | %d %s\n", connectionIndex, threadId,
+                clientIp, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
         fclose(file);
     }
 }

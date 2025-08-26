@@ -11,6 +11,7 @@
 
 #define PRINT_LOG 1 << 0
 #define FILE_LOG 1 << 1
+#define JSON_LOG 1 << 2
 
 void setLogFile(const char *path);
 void setLogFlags(int flags);

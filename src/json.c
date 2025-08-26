@@ -3,6 +3,7 @@
 //
 
 #include "json.h"
+#include "alloc.h"
 
 #include <limits.h>
 #include <string.h>
@@ -66,7 +67,7 @@ JToken toJToken_bool(bool boolean) {
     };
 }
 
-JToken toJToken_string(string string) {
+JToken toJToken_string(ARRAY_T(char) string) {
     return (JToken) {
         .value = (JValue) {.string = (JString) {
             .value = string.data,
@@ -95,6 +96,35 @@ JToken _JNull() {
         .type = JSON_NULL,
     };
 }
+
+JObject toJObject_JProperties(const unsigned int count, ...) {
+    va_list args;
+    va_start(args, count);
+    JObject object = {
+        .properties = allocate(sizeof(JProperty) * count),
+        .count = count,
+    };
+    for (unsigned int i = 0; i < count; i++) {
+        object.properties[i] = va_arg(args, JProperty);
+    }
+    va_end(args);
+    return object;
+}
+
+JList toJList_JTokens(const unsigned int count, ...) {
+    va_list args;
+    va_start(args, count);
+    JList list = {
+        .tokens = allocate(sizeof(JToken) * count),
+        .count = count,
+    };
+    for (unsigned int i = 0; i < count; i++) {
+        list.tokens[i] = va_arg(args, JToken);
+    }
+    va_end(args);
+    return list;
+}
+
 
 static void serializeElement(JToken element, ARRAY_T(char) *buffer, int indentDepth, int indent);
 static void serializeObject(JObject object, ARRAY_T(char) *buffer, int indentDepth, int indent);
@@ -204,7 +234,7 @@ static void serializeString(JString string_, ARRAY_T(char) *buffer) {
     unsigned int newCap = buffer->capacity + string_.size;
     ARRAY_ENSURE_CAPACITY(char, buffer, newCap);
     int specialCharacters = 0;
-    for (int i = 0; i < string_.size; i++) {
+    for (unsigned int i = 0; i < string_.size; i++) {
         char c = string_.value[i];
         switch (c) {
             case '"':

@@ -7,6 +7,7 @@
 
 #include "app_state.h"
 #include "http.h"
+#include "json.h"
 
 typedef enum HttpMethod {
     GET,
@@ -48,5 +49,7 @@ int pathToStr(char *str, int size, HttpPath path);
 int reqEq(HttpReq obj1, HttpReq obj2);
 void freeReq(HttpReq *req);
 int isConnectionKeepAlive(HttpReq *req);
+JObject httpReqToJObject(HttpReq *req);
+void freeHttpReqJObject(JObject *req);
 
 #endif //HTTP_REQ_H

@@ -7,6 +7,7 @@
 
 #include "array.h"
 #include <stdbool.h>
+#include <stdarg.h>
 
 typedef enum JType
 {
@@ -56,7 +57,6 @@ typedef union
 } JValue;
 
 DEFINE_ARRAY_H(char)
-typedef ARRAY_T(char) string;
 
 struct JToken
 {
@@ -88,7 +88,7 @@ JToken toJToken_JBool(JBool boolean);
 JToken toJToken_double(double number);
 JToken toJToken_int(int number);
 JToken toJToken_bool(bool boolean);
-JToken toJToken_string(string string);
+JToken toJToken_string(ARRAY_T(char) string);
 JToken toJToken_cstring(char *cstring);
 JToken toJToken_JToken(JToken token);
 JToken _JNull();
@@ -103,12 +103,16 @@ JToken _JNull();
     bool: toJToken_bool,\
     string: toJToken_string,\
     char *: toJToken_cstring,\
+    const char*: toJToken_cstring,\
     JToken: toJToken_JToken\
 )(value)
 
+JObject toJObject_JProperties(const unsigned int count, ...);
+JList toJList_JTokens(const unsigned int count, ...);
+
 #define _JString(cstring) ((JString) {.value = cstring, .size = strlen(cstring)})
 #define _JProperty(cstring, value) ((JProperty) {.key = _JString(cstring), .token = _JToken(value)})
-#define _JList(...) ((JList) {.tokens = ((JToken[]) {__VA_ARGS__}), .count = (sizeof((JToken[]){__VA_ARGS__}) / sizeof(JToken))})
-#define _JObject(...) ((JObject) {.properties = ((JProperty[]) {__VA_ARGS__}), .count = (sizeof((JProperty[]){__VA_ARGS__}) / sizeof(JProperty))})
+#define _JList(...) toJList_JTokens((sizeof((JToken[]){__VA_ARGS__})/sizeof(JToken)), __VA_ARGS__)
+#define _JObject(...) toJObject_JProperties((sizeof((JProperty[]){__VA_ARGS__})/sizeof(JProperty)), __VA_ARGS__)
 
 #endif //JSON_H

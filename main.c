@@ -3,6 +3,7 @@
 
 // #define TRACK_LEAK
 #include "src/alloc.h"
+#include "logging.h"
 
 HttpResp indexH(HttpReq);
 HttpResp stylesheetH(HttpReq);
@@ -19,6 +20,8 @@ int main(int argc, char **argv)
     addEndpoint("/", indexH);
     addEndpoint("/stylesheet", stylesheetH);
     addEndpoint("/assets/<str>", assetH);
+    setLogFile("hello.txt");
+    setLogFlags(JSON_LOG);
     setNotFoundCallback(notFoundH);
 
     if (argc == 2)

@@ -14,8 +14,6 @@
 #include "alloc.h"
 #include "app.h"
 
-#include <errno.h>
-
 #include "app_state.h"
 #include "connection.h"
 #include "http_router.h"

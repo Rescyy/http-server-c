@@ -388,3 +388,45 @@ int isConnectionKeepAlive(HttpReq *req)
     }
     return strcasecmp(header->value, "keep-alive") == 0;
 }
+
+JObject httpReqToJObject(HttpReq *req) {
+    static const char methodKey[] = "method";
+    static const char pathKey[] = "path";
+    static const char versionKey[] = "version";
+    static const char headersKey[] = "headers";
+    static const char contentKey[] = "content";
+
+    char *path = malloc(1024);
+    pathToStr(path, 1024, req->path);
+    JObject headersObj = {
+        .properties = allocate(sizeof(JProperty) * req->headers.count),
+        .count = req->headers.count
+    };
+    HttpHeader *headers = req->headers.arr;
+    for (int i = 0; i < req->headers.count; i++) {
+        headersObj.properties[i] = _JProperty(headers[i].key, headers[i].value);
+    }
+
+    JToken contentToken;
+    if (req->content == NULL) {
+        contentToken = _JNull();
+    } else {
+        contentToken = _JToken((char *) req->content);
+    }
+
+    JObject reqObject = _JObject(
+        _JProperty(methodKey, methodToStr(req->method)),
+        _JProperty(pathKey, path),
+        _JProperty(versionKey, req->version),
+        _JProperty(headersKey, headersObj),
+        _JProperty(contentKey, contentToken)
+    );
+
+    return reqObject;
+}
+
+void freeHttpReqJObject(JObject *req) {
+    deallocate(req->properties[1].token.value.string.value); //free path
+    deallocate(req->properties[3].token.value.object.properties);
+    deallocate(req->properties);
+}
