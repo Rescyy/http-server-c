@@ -60,7 +60,7 @@ void setLogFlags(int flags)
 void logResponse(HttpResp *resp, HttpReq *req)
 {
     char path[1024];
-    pathToStr(path, 1024, req->path);
+    strncpy(path, req->path.raw, 1024);
     long threadId = (long)pthread_self();
     char *clientIp = req->appState->clientSocket.ip;
     unsigned long connectionIndex = req->appState->connectionIndex;
@@ -94,7 +94,7 @@ void logResponse(HttpResp *resp, HttpReq *req)
 void logError(HttpReq *req, const char *error)
 {
     char path[1024];
-    pathToStr(path, 1024, req->path);
+    strncpy(path, req->path.raw, 1024);
     long threadId = (long)pthread_self();
     char *clientIp = req->appState->clientSocket.ip;
     unsigned long connectionIndex = req->appState->connectionIndex;

@@ -202,6 +202,8 @@ int parsePath(HttpPath *path, const char *str, int n)
     int offset, prevOffset = 0, pathCap = 1;
     path->elCount = 0;
     path->elements = NULL;
+    path->raw = allocate(n + 1);
+    strncpy(path->raw, str, n);
     char *element;
     if (str[prevOffset++] != '/')
         return -1;
@@ -258,6 +260,7 @@ void freePath(HttpPath *path)
         deallocate(path->elements[i]);
     }
     deallocate(path->elements);
+    deallocate(path->raw);
     path->elements = NULL;
 }
 
@@ -297,7 +300,7 @@ int pathMatches(HttpPath endpointPath, HttpPath reqPath)
         }
         else if (strcmp(endpointPath.elements[i], "<int>") == 0)
         {
-            int result = strtol(reqPath.elements[i], NULL, 10);
+            long result = strtol(reqPath.elements[i], NULL, 10);
             if (result == 0 && strcmp(reqPath.elements[i], "0") != 0)
             {
                 return 0;
@@ -309,21 +312,6 @@ int pathMatches(HttpPath endpointPath, HttpPath reqPath)
         }
     }
     return 1;
-}
-
-int pathToStr(char *str, int size, HttpPath path)
-{
-    if (size >= 2 && path.elCount == 0)
-    {
-        return snprintf(str, size, "/");
-    }
-
-    int bytes = 0;
-    for (int i = 0; i < path.elCount; i++)
-    {
-        bytes += snprintf(str + bytes, size - bytes, "/%s", path.elements[i]);
-    }
-    return bytes;
 }
 
 int reqEq(HttpReq obj1, HttpReq obj2)
@@ -397,7 +385,7 @@ JObject httpReqToJObject(HttpReq *req) {
     static const char contentKey[] = "content";
 
     char *path = malloc(1024);
-    pathToStr(path, 1024, req->path);
+    strncpy(path, req->path.raw, 1024);
     JObject headersObj = {
         .properties = allocate(sizeof(JProperty) * req->headers.count),
         .count = req->headers.count

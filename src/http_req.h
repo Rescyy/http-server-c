@@ -23,6 +23,7 @@ typedef enum HttpMethod {
 } HttpMethod;
 
 typedef struct HttpPath {
+    char *raw;
     char **elements;
     int elCount;
 } HttpPath;
@@ -45,7 +46,6 @@ int parsePath(HttpPath *path, const char *str, int n);
 void freePath(HttpPath *path);
 int pathEq(HttpPath obj1, HttpPath obj2);
 int pathMatches(HttpPath endpointPath, HttpPath reqPath);
-int pathToStr(char *str, int size, HttpPath path);
 int reqEq(HttpReq obj1, HttpReq obj2);
 void freeReq(HttpReq *req);
 int isConnectionKeepAlive(HttpReq *req);
