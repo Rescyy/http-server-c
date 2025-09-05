@@ -92,9 +92,13 @@ typedef enum HttpMimeType
     CONTENT_UNKNOWN = -1,
 } HttpContentType;
 
+#define USE_DEFAULT_SERVER_HEADER_FLAG 1 << 0
+#define USE_NO_CONTENT_RESPONSE_FLAG 1 << 1
+
 typedef struct HttpRespBuilder {
     HttpResp resp;
     int headersCapacity;
+    unsigned int flags;
 } HttpRespBuilder;
 
 const char *statusToStr(HttpStatus status);
@@ -112,6 +116,11 @@ void respBuilderSetVersion(HttpRespBuilder *builder, const char *version);
 void respBuilderAddHeader(HttpRespBuilder *builder, char *key, char *value);
 void respBuilderSetContent(HttpRespBuilder *builder, void *content, int contentLength);
 void respBuilderSetFileContent(HttpRespBuilder *builder, const char *path);
+#define SET_FLAGS 0
+#define UNSET_FLAGS 1
+#define REPLACE_FLAGS 2
+void respBuilderSetFlags(HttpRespBuilder *builder, unsigned int flags, int behaviour);
+void respBuilderSetDefaultFlags(unsigned int flags);
 HttpResp respBuild(HttpRespBuilder *builder);
 
 #endif //HTTP_RESP_H

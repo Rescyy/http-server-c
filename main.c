@@ -5,6 +5,7 @@
 #include "src/alloc.h"
 #include "logging.h"
 
+HttpResp helloH(HttpReq);
 HttpResp indexH(HttpReq);
 HttpResp stylesheetH(HttpReq);
 HttpResp notFoundH(HttpReq);
@@ -16,7 +17,8 @@ int main(int argc, char **argv)
     printf("Tracking leaks\n");
     init_alloc();
 #endif
-
+    respBuilderSetDefaultFlags(0);
+    addEndpoint("/hello", helloH);
     addEndpoint("/", indexH);
     addEndpoint("/stylesheet", stylesheetH);
     addEndpoint("/assets/<str>", assetH);
@@ -31,6 +33,11 @@ int main(int argc, char **argv)
     {
         startApp("8080");
     }
+}
+
+HttpResp helloH(HttpReq request) {
+    HttpRespBuilder builder = newRespBuilder();
+    return respBuild(&builder);
 }
 
 HttpResp indexH(HttpReq request)

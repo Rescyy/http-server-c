@@ -8,6 +8,7 @@
 #include "utils.h"
 
 #include <string.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -481,30 +482,71 @@ void respBuilderSetFileContent(HttpRespBuilder *builder, const char *filePath)
     }
 }
 
+void respBuilderSetFlags(HttpRespBuilder *builder, unsigned int flags, int behaviour) {
+    switch (behaviour) {
+        case SET_FLAGS:
+            builder->flags |= flags;
+            break;
+        case UNSET_FLAGS:
+            builder->flags &= ~flags;
+            break;
+        case REPLACE_FLAGS:
+            builder->flags = flags;
+            break;
+        default:
+            fprintf(stderr, "Unknown behaviour used inside respBuilderSetFlags");
+    }
+}
+
+static bool hasFlagsSet(HttpRespBuilder *builder, unsigned int flags) {
+    return builder->flags & flags;
+}
+
+static const char *determineContentType(HttpRespBuilder *builder) {
+    if (builder->resp.isContentFile) {
+        const char *extension = getExtension(builder->resp.content);
+        const char *mimeType = getMimeType(extension);
+        return mimeType;
+    }
+    if (builder->resp.contentLength > 0) {
+        return defaultMimeType;
+    }
+    return NULL;
+}
+
+static void setRespStatus(HttpRespBuilder *builder) {
+    if (builder->resp.status != STATUS_UNKNOWN)
+    {
+        return;
+    }
+    if (builder->resp.contentLength == 0 && hasFlagsSet(builder, USE_NO_CONTENT_RESPONSE_FLAG)) {
+        builder->resp.status = NO_CONTENT;
+        return;
+    }
+    builder->resp.status = OK;
+}
+
 HttpResp respBuild(HttpRespBuilder *builder)
 {
-    int contentLength = builder->resp.contentLength;
-    if (contentLength > 0)
+    const size_t contentLength = builder->resp.contentLength;
+    if (contentLength > 0 || !hasFlagsSet(builder, USE_NO_CONTENT_RESPONSE_FLAG))
     {
         char contentLengthStr[16];
-        snprintf(contentLengthStr, 16, "%d", contentLength);
+        snprintf(contentLengthStr, 16, "%zu", contentLength);
         addHeader(builder, "Content-Length", contentLengthStr);
-        if (builder->resp.isContentFile) {
-            const char *extension = getExtension(builder->resp.content);
-            const char *mimeType = getMimeType(extension);
-            addHeader(builder, "Content-Type", mimeType);
-        } else {
-            addHeader(builder, "Content-Type", defaultMimeType);
+        const char *contentType = determineContentType(builder);
+        if (contentType != NULL) {
+            addHeader(builder, "Content-Type", contentType);
         }
     }
-    addHeader(builder, "Server", "http-server-c");
-    if (builder->resp.status == STATUS_UNKNOWN)
-    {
-        builder->resp.status = OK;
+    if (hasFlagsSet(builder, USE_DEFAULT_SERVER_HEADER_FLAG)) {
+        addHeader(builder, "Server", "http-server-c");
     }
+    setRespStatus(builder);
     return builder->resp;
 }
 
+static unsigned int defaultRespBuilderFlags = USE_DEFAULT_SERVER_HEADER_FLAG;
 HttpRespBuilder newRespBuilder()
 {
     HttpRespBuilder builder = {
@@ -517,8 +559,13 @@ HttpRespBuilder newRespBuilder()
             .isContentFile = 0,
         },
         .headersCapacity = 0,
+        .flags = defaultRespBuilderFlags,
     };
     return builder;
+}
+
+void respBuilderSetDefaultFlags(const unsigned int flags) {
+    defaultRespBuilderFlags = flags;
 }
 
 int respEq(HttpResp obj1, HttpResp obj2)
