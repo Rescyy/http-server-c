@@ -10,6 +10,7 @@ HttpResp indexH(HttpReq);
 HttpResp stylesheetH(HttpReq);
 HttpResp notFoundH(HttpReq);
 HttpResp assetH(HttpReq);
+HttpResp jsonFormatterH(HttpReq);
 
 int main(int argc, char **argv)
 {
@@ -22,6 +23,7 @@ int main(int argc, char **argv)
     addEndpoint("/", indexH);
     addEndpoint("/stylesheet", stylesheetH);
     addEndpoint("/assets/<str>", assetH);
+    addEndpoint("/jsonFormatter", jsonFormatterH);
     setLogFile("hello.txt");
     setNotFoundCallback(notFoundH);
 
@@ -80,4 +82,24 @@ HttpResp assetH(HttpReq request)
     respBuilderSetFileContent(&builder, assetPath);
 
     return respBuild(&builder);
+}
+
+HttpResp jsonFormatterH(HttpReq request) {
+    HttpRespBuilder b = newRespBuilder();
+
+    RESULT_T(JToken) token = deserializeJson(request.content, request.contentLength);
+
+    printf("Content: (%d) %.*s\n", request.contentLength, request.contentLength, (char*) request.content);
+
+    if (!token.ok) {
+        respBuilderSetStatus(&b, BAD_REQUEST);
+    } else {
+        char *formatted;
+        const size_t formattedSize = serializeJson(token.var, &formatted, 4);
+        respBuilderSetContent(&b, formatted, formattedSize);
+        freeJson(&token.var);
+        deallocate(formatted);
+    }
+
+    return respBuild(&b);
 }

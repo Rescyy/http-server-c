@@ -79,7 +79,7 @@ Returns the amount of bytes written in the buffer.
 Note that the amount allocated will not always equal size.
 If you need to save space, reallocate the buffer.
 */
-unsigned int serializeJson(JToken element, char **buffer, int indent);
+size_t serializeJson(JToken element, char **buffer, int indent);
 RESULT_T(JToken) deserializeJson(const char *buffer, size_t len);
 void freeJson(JToken *token);
 int equalsJson(JToken *a, JToken *b);

@@ -13,7 +13,7 @@
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
-#define POLL_TIMEOUT (5 * 1000)
+#define POLL_TIMEOUT (5 * 10)
 
 TcpStream newTcpStream(int fd)
 {

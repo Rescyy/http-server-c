@@ -444,7 +444,7 @@ void respBuilderAddHeader(HttpRespBuilder *builder, char *key, char *value)
     headers->arr[headers->count++] = header;
 }
 
-void respBuilderSetContent(HttpRespBuilder *builder, void *content, int contentLength)
+void respBuilderSetContent(HttpRespBuilder *builder, void *content, size_t contentLength)
 {
     assert(builder->resp.content == NULL && "The builder already has some content set");
 

@@ -114,7 +114,7 @@ HttpRespBuilder newRespBuilder();
 void respBuilderSetStatus(HttpRespBuilder *builder, HttpStatus status);
 void respBuilderSetVersion(HttpRespBuilder *builder, const char *version);
 void respBuilderAddHeader(HttpRespBuilder *builder, char *key, char *value);
-void respBuilderSetContent(HttpRespBuilder *builder, void *content, int contentLength);
+void respBuilderSetContent(HttpRespBuilder *builder, void *content, size_t contentLength);
 void respBuilderSetFileContent(HttpRespBuilder *builder, const char *path);
 #define SET_FLAGS 0
 #define UNSET_FLAGS 1

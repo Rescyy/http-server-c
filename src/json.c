@@ -22,7 +22,7 @@ static void serializeString(JString string_, ARRAY_T(char) *buffer);
 static void serializeNumber(JNumber number, ARRAY_T(char) *buffer);
 static void serializeBoolean(JBool boolean, ARRAY_T(char) *buffer);
 
-unsigned int serializeJson(JToken element, char **buffer, int indent) {
+size_t serializeJson(JToken element, char **buffer, int indent) {
     ARRAY_T(char) array = ARRAY_WITH_CAPACITY(char, 4);
     serializeElement(element, &array, 0, indent);
     *buffer = array.data;
@@ -264,6 +264,7 @@ static RESULT_T(JBool) deserializeBoolean(buffer_t *buffer);
 static int skipWhitespace(buffer_t *buffer);
 
 RESULT_T(JToken) deserializeJson(const char *buffer, const size_t len) {
+    if (buffer == NULL || len == 0) return RESULT_ERROR(JToken);
     buffer_t buffer_ = { .ptr = buffer, .len = len };
     RESULT_T(JToken) token = deserializeToken(&buffer_);
     if (!skipWhitespace(&buffer_)) return RESULT_ERROR(JToken);
@@ -379,7 +380,7 @@ static RESULT_T(JString) deserializeString(buffer_t *buffer) {
         }
     }
 _freeString:
-    free(string);
+    deallocate(string);
 _return:
     return RESULT_ERROR(JString);
 }
