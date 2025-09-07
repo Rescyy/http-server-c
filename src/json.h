@@ -6,8 +6,7 @@
 #define JSON_H
 
 #include "array.h"
-#include <stdbool.h>
-#include <stdarg.h>
+#include "result.h"
 
 typedef enum JType
 {
@@ -24,17 +23,17 @@ typedef struct JProperty JProperty;
 
 typedef struct {
     JProperty *properties;
-    unsigned int count;
+    size_t count;
 } JObject;
 
 typedef struct {
     JToken *tokens;
-    unsigned int count;
+    size_t count;
 } JList;
 
 typedef struct {
     char *value;
-    unsigned int size;
+    size_t size;
 } JString;
 
 typedef struct
@@ -56,19 +55,21 @@ typedef union
     JBool boolean;
 } JValue;
 
-DEFINE_ARRAY_H(char)
+DEFINE_ARRAY_H(char);
 
 struct JToken
 {
-    JValue value;
+    JValue literal;
     JType type;
 };
 
 struct JProperty
 {
     JString key;
-    JToken token;
+    JToken value;
 };
+
+TYPEDEF_RESULT(JToken);
 
 /*
 Takes in a JsonElement struct, a pointer to a pointer of a buffer.
@@ -79,7 +80,11 @@ Note that the amount allocated will not always equal size.
 If you need to save space, reallocate the buffer.
 */
 unsigned int serializeJson(JToken element, char **buffer, int indent);
-JToken deserializeJson(char *buffer);
+RESULT_T(JToken) deserializeJson(const char *buffer, size_t len);
+void freeJson(JToken *token);
+int equalsJson(JToken *a, JToken *b);
+JToken *getValueJObject(JObject *object, char *buffer, size_t len);
+
 JToken toJToken_JObject(JObject object);
 JToken toJToken_JList(JList array);
 JToken toJToken_JString(JString string);
@@ -92,7 +97,10 @@ JToken toJToken_string(ARRAY_T(char) string);
 JToken toJToken_cstring(char *cstring);
 JToken toJToken_JToken(JToken token);
 JToken _JNull();
-#define _JToken(value) (JToken) _Generic((value),\
+JList _JListEmpty();
+JObject _JObjectEmpty();
+JString _JStringEmpty();
+#define _JToken(value) ((JToken) _Generic((value),\
     JObject: toJToken_JObject,\
     JList: toJToken_JList,\
     JString: toJToken_JString,\
@@ -101,17 +109,16 @@ JToken _JNull();
     double: toJToken_double,\
     int: toJToken_int,\
     bool: toJToken_bool,\
-    string: toJToken_string,\
     char *: toJToken_cstring,\
     const char*: toJToken_cstring,\
     JToken: toJToken_JToken\
-)(value)
+)(value))
 
 JObject toJObject_JProperties(const unsigned int count, ...);
 JList toJList_JTokens(const unsigned int count, ...);
 
 #define _JString(cstring) ((JString) {.value = cstring, .size = strlen(cstring)})
-#define _JProperty(cstring, value) ((JProperty) {.key = _JString(cstring), .token = _JToken(value)})
+#define _JProperty(cstring, token) ((JProperty) {.key = _JString(cstring), .value = _JToken(token)})
 #define _JList(...) toJList_JTokens((sizeof((JToken[]){__VA_ARGS__})/sizeof(JToken)), __VA_ARGS__)
 #define _JObject(...) toJObject_JProperties((sizeof((JProperty[]){__VA_ARGS__})/sizeof(JProperty)), __VA_ARGS__)
 

@@ -21,7 +21,7 @@ void *_allocateTrack(size_t size, const char *file, int line);
 void _deallocateTrack(void *ptr, const char *file, int line);
 void *_reallocateTrack(void* ptr, size_t size, const char *file, int line);
 
-#if defined(TRACK_LEAK)
+#ifdef TRACK_LEAK
 #define allocate(size)       _allocateTrack((size), __FILE__, __LINE__)
 #define deallocate(ptr)      _deallocateTrack((ptr), __FILE__, __LINE__)
 #define reallocate(ptr, sz)  _reallocateTrack((ptr), (sz), __FILE__, __LINE__)

@@ -149,7 +149,7 @@ void init_alloc(void) {
 
 // Public control
 void start_alloc_tracking(void) {
-#if defined(TRACK_LEAK)
+#ifdef TRACK_LEAK
     TrackArray *trackArray = _allocate(sizeof(TrackArray));
     trackArray->g_cap = 1000;
     trackArray->g_entries = _allocate(sizeof(TrackEntry) * trackArray->g_cap);
@@ -160,7 +160,7 @@ void start_alloc_tracking(void) {
 }
 
 void stop_alloc_tracking(void) {
-#if defined(TRACK_LEAK)
+#ifdef TRACK_LEAK
     TrackArray *trackArray = pthread_getspecific(g_alloc_key);
     dump_leaks(trackArray);
     for (size_t i = 0; i < trackArray->g_count; ++i) {

@@ -79,7 +79,7 @@ void startApp(char *port) {
 
 void *handleConnectionThreadCall(void *arg) {
     start_alloc_tracking();
-    SessionState *appState = (SessionState *) arg;
+    SessionState *appState = arg;
     handleConnection(appState);
     closeSocket(appState->clientSocket);
     stop_alloc_tracking();
@@ -104,7 +104,7 @@ int handleRequest(SessionState *appState, TcpStream *stream) {
     };
     HttpResp resp;
     tcpStreamWait(stream);
-    if (stream->error == TCP_STREAM_CLOSED || stream->error == TCP_STREAM_ERROR) {
+    if (stream->error == TCP_STREAM_CLOSED || stream->error == TCP_STREAM_ERROR || stream->error == TCP_STREAM_TIMEOUT) {
         return 0;
     }
     int result = parseRequestStream(&request, stream);

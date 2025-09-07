@@ -8,123 +8,12 @@
 #include <limits.h>
 #include <string.h>
 #include <math.h>
+#include <stdarg.h>
+#include <errno.h>
+
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 DEFINE_ARRAY_FUNCS(char)
-
-JToken toJToken_JObject(JObject object) {
-    return (JToken) {
-        .value = (JValue) {.object = object},
-        .type = JSON_OBJECT,
-    };
-}
-
-JToken toJToken_JList(JList array) {
-    return (JToken) {
-        .value = (JValue) {.list = array},
-        .type = JSON_LIST
-    };
-}
-
-JToken toJToken_JString(JString string) {
-    return (JToken) {
-        .value = (JValue) {.string = string},
-        .type = JSON_STRING,
-    };
-}
-
-JToken toJToken_JNumber(JNumber number) {
-    return (JToken) {
-        .value = (JValue) {.number = number},
-        .type = JSON_NUMBER,
-    };
-}
-
-JToken toJToken_JBool(JBool boolean) {
-    return (JToken) {
-        .value = {.boolean = boolean},
-        .type = JSON_BOOLEAN,
-    };
-}
-
-JToken toJToken_double(double number) {
-    return (JToken){
-        .value = (JValue) {.number = (JNumber) {.value = number}},
-        .type = JSON_NUMBER,
-    };
-}
-
-JToken toJToken_int(int number) {
-    return (JToken) {
-        .value = (JValue) {.number = (JNumber) {.value = number}},
-        .type = JSON_NUMBER,
-    };
-}
-
-JToken toJToken_bool(bool boolean) {
-    return (JToken) {
-        .value = (JValue) {.boolean = (JBool){.value = boolean}},
-        .type = JSON_BOOLEAN,
-    };
-}
-
-JToken toJToken_string(ARRAY_T(char) string) {
-    return (JToken) {
-        .value = (JValue) {.string = (JString) {
-            .value = string.data,
-            .size = string.length,
-        }},
-        .type = JSON_STRING,
-    };
-}
-
-JToken toJToken_cstring(char *cstring) {
-    return (JToken) {
-        .value = (JValue) {.string = (JString){
-            .value = cstring,
-            .size = strlen(cstring),
-        }},
-        .type = JSON_STRING,
-    };
-}
-
-JToken toJToken_JToken(JToken token) {
-    return token;
-}
-
-JToken _JNull() {
-    return (JToken) {
-        .type = JSON_NULL,
-    };
-}
-
-JObject toJObject_JProperties(const unsigned int count, ...) {
-    va_list args;
-    va_start(args, count);
-    JObject object = {
-        .properties = allocate(sizeof(JProperty) * count),
-        .count = count,
-    };
-    for (unsigned int i = 0; i < count; i++) {
-        object.properties[i] = va_arg(args, JProperty);
-    }
-    va_end(args);
-    return object;
-}
-
-JList toJList_JTokens(const unsigned int count, ...) {
-    va_list args;
-    va_start(args, count);
-    JList list = {
-        .tokens = allocate(sizeof(JToken) * count),
-        .count = count,
-    };
-    for (unsigned int i = 0; i < count; i++) {
-        list.tokens[i] = va_arg(args, JToken);
-    }
-    va_end(args);
-    return list;
-}
-
 
 static void serializeElement(JToken element, ARRAY_T(char) *buffer, int indentDepth, int indent);
 static void serializeObject(JObject object, ARRAY_T(char) *buffer, int indentDepth, int indent);
@@ -143,23 +32,23 @@ unsigned int serializeJson(JToken element, char **buffer, int indent) {
 static void serializeElement(JToken element, ARRAY_T(char) *buffer, int indentDepth, int indent) {
     switch (element.type) {
         case JSON_OBJECT: {
-            serializeObject(element.value.object, buffer, indentDepth + 1, indent);
+            serializeObject(element.literal.object, buffer, indentDepth + 1, indent);
             break;
         }
         case JSON_LIST: {
-            serializeList(element.value.list, buffer, indentDepth + 1, indent);
+            serializeList(element.literal.list, buffer, indentDepth + 1, indent);
             break;
         }
         case JSON_STRING: {
-            serializeString(element.value.string, buffer);
+            serializeString(element.literal.string, buffer);
             break;
         }
         case JSON_NUMBER: {
-            serializeNumber(element.value.number, buffer);
+            serializeNumber(element.literal.number, buffer);
             break;
         }
         case JSON_BOOLEAN: {
-            serializeBoolean(element.value.boolean, buffer);
+            serializeBoolean(element.literal.boolean, buffer);
             break;
         }
         case JSON_NULL: {
@@ -187,7 +76,7 @@ static void serializeObject(JObject object, ARRAY_T(char) *buffer, int indentDep
         if (indent) {
             ARRAY_PUSH(char, buffer, ' ');
         }
-        serializeElement(object.properties[i].token, buffer, indentDepth, indent);
+        serializeElement(object.properties[i].value, buffer, indentDepth, indent);
         if (i != object.count - 1) {
             ARRAY_PUSH(char, buffer, ',');
         }
@@ -286,3 +175,573 @@ static void serializeBoolean(JBool boolean, ARRAY_T(char) *buffer) {
         ARRAY_PUSH_RANGE(char, buffer, falseStr, strlen(falseStr));
     }
 }
+
+static void freeJToken(JToken *token);
+static void freeJString(JString *string);
+static void freeJProperties(JProperty *properties, size_t count);
+static void freeJObject(JObject *object);
+static void freeJTokens(JToken *tokens, size_t count);
+static void freeJList(JList *list);
+
+void freeJson(JToken *token) {
+    freeJToken(token);
+}
+
+static void freeJToken(JToken *token) {
+    switch (token->type) {
+        case JSON_OBJECT: {
+            freeJObject(&token->literal.object);
+            break;
+        }
+        case JSON_LIST: {
+            freeJList(&token->literal.list);
+            break;
+        }
+        case JSON_STRING: {
+            freeJString(&token->literal.string);
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+static void freeJString(JString *string) {
+    deallocate(string->value);
+}
+
+static void freeJTokens(JToken *tokens, size_t count) {
+    for (size_t i = 0; i < count; i++) {
+        freeJToken(&tokens[i]);
+    }
+    deallocate(tokens);
+}
+
+static void freeJList(JList *list) {
+    freeJTokens(list->tokens, list->count);
+}
+
+static void freeJProperties(JProperty *properties, size_t count) {
+    for (size_t i = 0; i < count; i++) {
+        freeJString(&properties[i].key);
+        freeJToken(&properties[i].value);
+    }
+    deallocate(properties);
+}
+
+static void freeJObject(JObject *object) {
+    freeJProperties(object->properties, object->count);
+}
+
+TYPEDEF_RESULT(JObject);
+TYPEDEF_RESULT(JList);
+TYPEDEF_RESULT(JNumber);
+TYPEDEF_RESULT(JBool);
+TYPEDEF_RESULT(JString);
+
+typedef struct {
+    char *ptr;
+    size_t len;
+} buffer_t;
+
+#define LEN ((buffer)->len)
+#define CHAR_AT(i) ((LEN > (i)) ? (buffer)->ptr[i] : 0)
+#define CHAR CHAR_AT(0)
+#define PTR ((buffer)->ptr)
+#define CMP(str) (strncmp(PTR, str, MIN(strlen(str), LEN)) == 0)
+#define ADD(num) (buffer)->ptr += (num), (buffer)->len -= (num)
+#define SKIP_WHITESPACE(type, action) if (!skipWhitespace(buffer)) {action;}
+#define ASSERT_CHAR(type, c, action) if (CHAR != (c)) {action;} ADD(1)
+#define IF_ERROR(type, result, action) if (!result.ok) {action;}
+#define IF_ERROR_RETURN(type, result) IF_ERROR(type, result, return RESULT_ERROR(type))
+
+static RESULT_T(JToken) deserializeToken(buffer_t *buffer);
+static RESULT_T(JString) deserializeString(buffer_t *buffer);
+static RESULT_T(JObject) deserializeObject(buffer_t *buffer);
+static RESULT_T(JList) deserializeList(buffer_t *buffer);
+static RESULT_T(JNumber) deserializeNumber(buffer_t *buffer);
+static RESULT_T(JBool) deserializeBoolean(buffer_t *buffer);
+static int skipWhitespace(buffer_t *buffer);
+
+RESULT_T(JToken) deserializeJson(const char *buffer, const size_t len) {
+    buffer_t buffer_ = { .ptr = buffer, .len = len };
+    RESULT_T(JToken) token = deserializeToken(&buffer_);
+    if (!skipWhitespace(&buffer_)) return RESULT_ERROR(JToken);
+    if (buffer_.len != 0) return RESULT_ERROR(JToken);
+    return token;
+}
+
+static RESULT_T(JToken) deserializeToken(buffer_t *buffer) {
+    JToken token;
+    SKIP_WHITESPACE(JToken, return RESULT_ERROR(JToken));
+    switch (CHAR) {
+        case '{': {
+            RESULT_T(JObject) object = deserializeObject(buffer);
+            IF_ERROR_RETURN(JToken, object);
+            token = _JToken(object.var);
+            break;
+        }
+        case '[': {
+            RESULT_T(JList) list = deserializeList(buffer);
+            IF_ERROR_RETURN(JToken, list);
+            token = _JToken(list.var);
+            break;
+        }
+        case '"': {
+            RESULT_T(JString) string = deserializeString(buffer);
+            IF_ERROR_RETURN(JToken, string);
+            token = toJToken_JString(string.var);
+            break;
+        }
+        case 't':
+        case 'f': {
+            RESULT_T(JBool) boolean = deserializeBoolean(buffer);
+            IF_ERROR_RETURN(JToken, boolean);
+            token = toJToken_JBool(boolean.var);
+            break;
+        }
+        case '-':
+        case '0' ... '9': {
+            RESULT_T(JNumber) number = deserializeNumber(buffer);
+            IF_ERROR_RETURN(JToken, number);
+            token = toJToken_JNumber(number.var);
+            break;
+        }
+        case 'n': {
+            static const char nullString[] = "null";
+            if (CMP(nullString)) {
+                token = _JNull();
+                ADD(strlen(nullString));
+            } else {
+                return RESULT_ERROR(JToken);
+            }
+            break;
+        }
+        default:
+            return RESULT_ERROR(JToken);
+    }
+    return RESULT_FROM_VAR(JToken, token);
+}
+
+static RESULT_T(JString) deserializeString(buffer_t *buffer) {
+    ASSERT_CHAR(JString, '"', goto _return);
+    if (CHAR == '"') {
+        JString string = _JStringEmpty();
+        ADD(1);
+        return RESULT_FROM_VAR(JString, string);
+    }
+    size_t stringLen = 0;
+    int backslash = 0;
+    char *string = allocate(LEN);
+    for (size_t i = 0; i < LEN; i++) {
+        const char c = CHAR_AT(i);
+        if (backslash) {
+            backslash = 0;
+            switch (c) {
+                case '\\':
+                case '"':
+                case '/':
+                    string[stringLen++] = c;
+                    break;
+                case 'n':
+                    string[stringLen++] = '\n';
+                    break;
+                case 'b':
+                    string[stringLen++] = '\b';
+                    break;
+                case 't':
+                    string[stringLen++] = '\t';
+                    break;
+                case 'r':
+                    string[stringLen++] = '\r';
+                    break;
+                case 'f':
+                    string[stringLen++] = '\f';
+                    break;
+                default:
+                    goto _freeString;
+            }
+        } else switch (c) {
+            case '\\':
+                backslash = 1;
+                break;
+            case '"': {
+                string = reallocate(string, stringLen);
+                JString jstring = {.value = string, .size = stringLen};
+                ADD(i + 1);
+                return RESULT_FROM_VAR(JString, jstring);
+            }
+            case 0 ... ' ' - 1:
+                goto _freeString;
+            default:
+                string[stringLen++] = c;
+                break;
+        }
+    }
+_freeString:
+    free(string);
+_return:
+    return RESULT_ERROR(JString);
+}
+
+TYPEDEF_ARRAY(JProperty);
+DEFINE_ARRAY_C(JProperty);
+
+static RESULT_T(JObject) deserializeObject(buffer_t *buffer) {
+    ASSERT_CHAR(JObject, '{', goto _returnError);
+    SKIP_WHITESPACE(JObject, goto _returnError);
+    if (CHAR == '}') {
+        JObject object = _JObjectEmpty();
+        ADD(1);
+        return RESULT_FROM_VAR(JObject, object);
+    }
+    ARRAY_T(JProperty) properties = ARRAY_NEW(JProperty);
+    for (;;) {
+        RESULT_T(JString) key = deserializeString(buffer);
+        IF_ERROR(JObject, key, goto _freeProperties);
+        SKIP_WHITESPACE(JObject, goto _freeKey);
+        ASSERT_CHAR(JObject, ':', goto _freeKey);
+        SKIP_WHITESPACE(JObject, goto _freeKey);
+        RESULT_T(JToken) value = deserializeToken(buffer);
+        IF_ERROR(JObject, value, goto _freeKey);
+        SKIP_WHITESPACE(JObject, goto _freeValue);
+        JProperty property = {
+            .key = key.var,
+            .value = value.var,
+        };
+        ARRAY_PUSH(JProperty, &properties, property);
+        if (CHAR == '}') {
+            JObject object = {
+                .properties = properties.data,
+                .count = properties.length,
+            };
+            ARRAY_SHRINK_TO_FIT(JProperty, &properties);
+            ADD(1);
+            return RESULT_FROM_VAR(JObject, object);
+        }
+        ASSERT_CHAR(JObject, ',', goto _freeProperties);
+        SKIP_WHITESPACE(JObject, goto _freeProperties);
+        continue;
+    _freeValue:
+        freeJToken(&value.var);
+    _freeKey:
+        freeJString(&key.var);
+        break;
+    }
+
+_freeProperties:
+    freeJProperties(properties.data, properties.length);
+_returnError:
+    return RESULT_ERROR(JObject);
+}
+
+TYPEDEF_ARRAY(JToken);
+DEFINE_ARRAY_C(JToken);
+
+static RESULT_T(JList) deserializeList(buffer_t *buffer) {
+    ASSERT_CHAR(JList, '[', goto _returnError);
+    SKIP_WHITESPACE(JList, goto _returnError);
+    if (CHAR == ']') {
+        JList list = _JListEmpty();
+        return RESULT_FROM_VAR(JList, list);
+    }
+    ARRAY_T(JToken) tokens = ARRAY_NEW(JToken);
+    for (;;) {
+        RESULT_T(JToken) token = deserializeToken(buffer);
+        IF_ERROR(JList, token, goto _freeTokens);
+        SKIP_WHITESPACE(JList, goto _freeToken);
+        ARRAY_PUSH(JToken, &tokens, token.var);
+        if (CHAR == ']') {
+            JList list = {
+                .tokens = tokens.data,
+                .count = tokens.length,
+            };
+            ARRAY_SHRINK_TO_FIT(JToken, &tokens);
+            ADD(1);
+            return RESULT_FROM_VAR(JList, list);
+        }
+        ASSERT_CHAR(JList, ',', goto _freeTokens);
+        SKIP_WHITESPACE(JList, goto _freeTokens);
+        continue;
+    _freeToken:
+        freeJToken(&token.var);
+        break;
+    }
+_freeTokens:
+    freeJTokens(tokens.data, tokens.length);
+_returnError:
+    return RESULT_ERROR(JList);
+}
+
+static RESULT_T(JNumber) deserializeNumber(buffer_t *buffer) {
+    char parseable[128] = {0};
+    memcpy(parseable, PTR, MIN(128, LEN));
+
+    errno = 0;
+    char *numEnd;
+    double value = strtod(parseable, &numEnd);
+    size_t numLen = numEnd - parseable;
+
+    if (numLen == 0 || LEN < numLen || errno == ERANGE) {
+        return RESULT_ERROR(JNumber);
+    }
+
+    JNumber number = {.value = value};
+    ADD(numLen);
+    return RESULT_FROM_VAR(JNumber, number);
+}
+
+static RESULT_T(JBool) deserializeBoolean(buffer_t *buffer) {
+    static const char trueString[] = "true";
+    static const char falseString[] = "false";
+    JBool boolean;
+    if (CMP(trueString)) {
+        ADD(strlen(trueString));
+        boolean.value = 1;
+    } else if (CMP(falseString)) {
+        ADD(strlen(falseString));
+        boolean.value = 0;
+    } else {
+        return RESULT_ERROR(JBool);
+    }
+    return RESULT_FROM_VAR(JBool, boolean);
+}
+
+static int skipWhitespace(buffer_t *buffer) {
+    if (LEN == 0) return 1;
+    for (size_t i = 0; i < LEN; i++) {
+        char c = CHAR_AT(i);
+        switch (c) {
+            case ' ':
+            case '\n':
+            case '\r':
+            case '\t':
+                break;
+            default:
+                if (c < ' ') {
+                    return 0;
+                }
+                ADD(i);
+                return 1;
+        }
+    }
+    ADD(LEN);
+    return 1;
+}
+
+#undef LEN
+#undef CHAR_AT
+#undef CHAR
+#undef CMP
+#undef ADD
+#undef SKIP_WHITESPACE
+#undef ASSERT_CHAR
+
+static int equalsToken(JToken *token1, JToken *token2);
+static int equalsString(JString *string1, JString *string2);
+static int equalsObject(JObject *object1, JObject *object2);
+static int equalsList(JList *list1, JList *list2);
+static int equalsNumber(JNumber *number1, JNumber *number);
+static int equalsBoolean(JBool *boolean1, JBool *boolean2);
+
+int equalsJson(JToken *token1, JToken *token2) {
+    return equalsToken(token1, token2);
+}
+
+static int equalsToken(JToken *token1, JToken *token2) {
+    if (token1 == token2) return 1;
+    if (token1->type != token2->type) return 0;
+    JValue *value1 = &token1->literal, *value2 = &token2->literal;
+    switch (token1->type) {
+        case JSON_OBJECT:
+            return equalsObject(value1, value2);
+        case JSON_LIST:
+            return equalsList(value1, value2);
+        case JSON_NUMBER:
+            return equalsNumber(value1, value2);
+        case JSON_STRING:
+            return equalsString(value1, value2);
+        case JSON_BOOLEAN:
+            return equalsBoolean(value1, value2);
+        case JSON_NULL:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+static int equalsString(JString *string1, JString *string2) {
+    if (string1->size != string2->size) return 0;
+    return strncmp(string1->value, string2->value, string1->size) == 0;
+}
+
+static int equalsObject(JObject *object1, JObject *object2) {
+    if (object1->count != object2->count) return 0;
+    for (size_t i = 0; i < object1->count; i++) {
+        JString *key = &object1->properties[i].key;
+        JToken *token = getValueJObject(object2, key->value, key->size);
+        if (!equalsToken(token, &object1->properties[i].value)) return 0;
+    }
+    return 1;
+}
+
+static int equalsList(JList *list1, JList *list2) {
+    if (list1->count != list2->count) return 0;
+    for (size_t i = 0; i < list1->count; i++) {
+        if (!equalsToken(&list1->tokens[i], &list2->tokens[i])) return 0;
+    }
+    return 1;
+}
+
+static int equalsNumber(JNumber *number1, JNumber *number2) {
+    return number1->value == number2->value;
+}
+
+static int equalsBoolean(JBool *boolean1, JBool *boolean2) {
+    return boolean1->value == boolean2->value;
+}
+
+JToken *getValueJObject(JObject *object, char *buffer, size_t len) {
+    for (size_t i = 0; i < object->count; i++) {
+        JString *key = &object->properties[i].key;
+        if (strncmp(buffer, key->value, MIN(key->size, len)) == 0) {
+            return &object->properties[i].value;
+        }
+    }
+    return NULL;
+}
+
+JToken toJToken_JObject(JObject object) {
+    return (JToken) {
+        .literal = (JValue) {.object = object},
+        .type = JSON_OBJECT,
+    };
+}
+
+JToken toJToken_JList(JList array) {
+    return (JToken) {
+        .literal = (JValue) {.list = array},
+        .type = JSON_LIST
+    };
+}
+
+JToken toJToken_JString(JString string) {
+    return (JToken) {
+        .literal = (JValue) {.string = string},
+        .type = JSON_STRING,
+    };
+}
+
+JToken toJToken_JNumber(JNumber number) {
+    return (JToken) {
+        .literal = (JValue) {.number = number},
+        .type = JSON_NUMBER,
+    };
+}
+
+JToken toJToken_JBool(JBool boolean) {
+    return (JToken) {
+        .literal = {.boolean = boolean},
+        .type = JSON_BOOLEAN,
+    };
+}
+
+JToken toJToken_double(double number) {
+    return (JToken){
+        .literal = (JValue) {.number = (JNumber) {.value = number}},
+        .type = JSON_NUMBER,
+    };
+}
+
+JToken toJToken_int(int number) {
+    return (JToken) {
+        .literal = (JValue) {.number = (JNumber) {.value = number}},
+        .type = JSON_NUMBER,
+    };
+}
+
+JToken toJToken_bool(bool boolean) {
+    return (JToken) {
+        .literal = (JValue) {.boolean = (JBool){.value = boolean}},
+        .type = JSON_BOOLEAN,
+    };
+}
+
+JToken toJToken_string(ARRAY_T(char) string) {
+    return (JToken) {
+        .literal = (JValue) {.string = (JString) {
+            .value = string.data,
+            .size = string.length,
+        }},
+        .type = JSON_STRING,
+    };
+}
+
+JToken toJToken_cstring(char *cstring) {
+    return (JToken) {
+        .literal = (JValue) {.string = (JString){
+            .value = cstring,
+            .size = strlen(cstring),
+        }},
+        .type = JSON_STRING,
+    };
+}
+
+JToken toJToken_JToken(JToken token) {
+    return token;
+}
+
+JToken _JNull() {
+    return (JToken) {
+        .type = JSON_NULL,
+    };
+}
+
+JList _JListEmpty() {
+    return (JList) {
+        .tokens = NULL,
+        .count = 0,
+    };
+}
+JObject _JObjectEmpty() {
+    return (JObject) {
+        .properties = NULL,
+        .count = 0,
+    };
+}
+
+JString _JStringEmpty() {
+    return (JString) {
+        .value = NULL,
+        .size = 0,
+    };
+}
+
+JObject toJObject_JProperties(const unsigned int count, ...) {
+    va_list args;
+    va_start(args, count);
+    JObject object = {
+        .properties = allocate(sizeof(JProperty) * count),
+        .count = count,
+    };
+    for (unsigned int i = 0; i < count; i++) {
+        object.properties[i] = va_arg(args, JProperty);
+    }
+    va_end(args);
+    return object;
+}
+
+JList toJList_JTokens(const unsigned int count, ...) {
+    va_list args;
+    va_start(args, count);
+    JList list = {
+        .tokens = allocate(sizeof(JToken) * count),
+        .count = count,
+    };
+    for (unsigned int i = 0; i < count; i++) {
+        list.tokens[i] = va_arg(args, JToken);
+    }
+    va_end(args);
+    return list;
+}
+

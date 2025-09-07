@@ -18,7 +18,7 @@ typedef struct { \
     type *data; \
     unsigned int length; \
     unsigned int capacity; \
-} ARRAY_T(type);
+} ARRAY_T(type)
 
 #define DECLARE_ARRAY_FUNCS(type) \
 ARRAY_T(type) type##_array_with_capacity(unsigned int capacity);\
@@ -28,7 +28,8 @@ void type##_array_push(ARRAY_T(type) *arr, type value);\
 type type##_array_pop(ARRAY_T(type) *arr);\
 unsigned int type##_array_length(ARRAY_T(type) *arr);\
 void type##_array_push_range(ARRAY_T(type) *arr, type *range, int rangeLength);\
-void type##_array_push_multiple(ARRAY_T(type) *arr, type element, int amount);
+void type##_array_push_multiple(ARRAY_T(type) *arr, type element, int amount);\
+void type##_array_shrink_to_fit(ARRAY_T(type) *arr);
 
 #define DEFINE_ARRAY_FUNCS(type) \
 ARRAY_T(type) type##_array_with_capacity(unsigned int capacity) { \
@@ -87,10 +88,16 @@ void type##_array_push_multiple(ARRAY_T(type) *arr, type value, int amount) {\
         arr->data[arr->length + i] = value;\
     }\
     arr->length += amount;\
+}\
+\
+void type##_array_shrink_to_fit(ARRAY_T(type) *arr) {\
+    if (arr->length == 0 || arr->length == arr->capacity) return;\
+    reallocate(arr->data, arr->length * sizeof(type));\
+    arr->capacity = arr->length;\
 }
 
 #define DEFINE_ARRAY_H(type) \
-TYPEDEF_ARRAY(type) \
+TYPEDEF_ARRAY(type); \
 DECLARE_ARRAY_FUNCS(type)
 
 #define DEFINE_ARRAY_C(type) \
@@ -105,5 +112,6 @@ DEFINE_ARRAY_FUNCS(type)
 #define ARRAY_ENSURE_CAPACITY(type, arr, cap) type##_array_ensure_capacity(arr, cap)
 #define ARRAY_PUSH_RANGE(type, arr, range, rangeLength) type##_array_push_range(arr, range, rangeLength)
 #define ARRAY_PUSH_MULTIPLE(type, arr, value, amount) type##_array_push_multiple(arr, value, amount)
+#define ARRAY_SHRINK_TO_FIT(type, arr) type##_array_shrink_to_fit(arr)
 
 #endif //ARRAY_H

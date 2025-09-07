@@ -414,7 +414,7 @@ JObject httpReqToJObject(HttpReq *req) {
 }
 
 void freeHttpReqJObject(JObject *req) {
-    deallocate(req->properties[1].token.value.string.value); //free path
-    deallocate(req->properties[3].token.value.object.properties);
+    deallocate(req->properties[1].value.literal.string.value); //free path
+    deallocate(req->properties[3].value.literal.object.properties);
     deallocate(req->properties);
 }

@@ -13,6 +13,7 @@
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#define POLL_TIMEOUT (5 * 1000)
 
 TcpStream newTcpStream(int fd)
 {
@@ -48,8 +49,7 @@ void tcpStreamWait(TcpStream *stream)
         .events = POLLIN | POLLPRI,
     };
 
-    int result = poll(&fds, (nfds_t)1, -1);
-
+    int result = poll(&fds, (nfds_t)1, POLL_TIMEOUT);
 
     if (result < 0 || fds.revents & (POLLERR | POLLNVAL))
     {
@@ -67,6 +67,8 @@ void tcpStreamWait(TcpStream *stream)
     {
         return;
     }
+
+    stream->error = TCP_STREAM_TIMEOUT;
 }
 
 int tcpStreamWaitTimeout(TcpStream *stream, int timeout)

@@ -22,6 +22,7 @@ add_library(untitled_lib
         src/logging.c
         src/file_handler.c
         src/json.c
+        src/result.h
 )
 
 target_include_directories(untitled_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
