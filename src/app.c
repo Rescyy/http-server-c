@@ -10,6 +10,9 @@
 #include <sys/socket.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <sys/sendfile.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #include "alloc.h"
 #include "app.h"
@@ -25,53 +28,43 @@
 static HttpRouter router = {.capacity = -1};
 
 void *handleConnectionThreadCall(void *arg);
-
 void handleConnection(SessionState *appState);
-
-int sendResponse(HttpResp *resp, TcpSocket *client);
-
-int sendContent(HttpResp *resp, TcpSocket *client);
-
-int sendFile(HttpResp *resp, TcpSocket *client);
-
-int sendAll(TcpSocket *client, void *buffer, size_t size);
-
+WriteResult sendResponse(HttpResp *resp, TcpSocket *client);
+WriteResult sendContent(HttpResp *resp, TcpSocket *client);
+WriteResult sendFile(HttpResp *resp, TcpSocket *client);
 int handleError(int result, TcpSocket *client, HttpReq *request);
-
-int handleRequest(SessionState *appState, TcpStream *stream);
+int handleRequest(SessionState *state, TcpStream *stream);
 
 void startApp(char *port) {
+    fflush(stdout);
     signal(SIGPIPE, SIG_IGN);
 
     if (router.capacity == -1) {
         router = emptyRouter();
     }
-    TcpSocket socket = socketListen(port);
     pthread_t thread1;
 
-    if (socket.error == -1) {
-        fprintf(stderr, "Socket port unavailable\n");
+    TcpSocket socket = socketListen(port);
+    if (socket.closed) {
+        fatal("Failed listening to socket");
         exit(1);
     }
-    if (socket.error != 0) {
-        fprintf(stderr, "Socket listen failed: %s\n", strerror(socket.error));
-        exit(1);
-    }
-    printf("Listening to port %s.\n", port);
+    info(NULL, "Listening to port %s", port);
+
     int connectionIndex = 1;
 
     for (;;) {
-        SessionState *appState = newSessionAppState();
-        appState->connectionIndex = connectionIndex++;
+        SessionState *state = newSessionState();
+        state->connectionIndex = connectionIndex++;
         TcpSocket clientSocket = acceptConnection(socket);
 
-        if (hasError(clientSocket)) {
-            fprintf(stderr, "Connection Index [%lu] Client connection error: %s\n",
-                    appState->connectionIndex,
-                    strerror(clientSocket.error));
+        info("Connection accepted from client %s", clientSocket.ip);
+        if (clientSocket.closed) {
+            error("Client connection error: %s", strerror(errno));
+            deallocate(state);
         } else {
-            appState->clientSocket = clientSocket;
-            pthread_create(&thread1, NULL, handleConnectionThreadCall, appState);
+            state->clientSocket = clientSocket;
+            pthread_create(&thread1, NULL, handleConnectionThreadCall, state);
             pthread_detach(thread1);
         }
     }
@@ -79,36 +72,34 @@ void startApp(char *port) {
 
 void *handleConnectionThreadCall(void *arg) {
     start_alloc_tracking();
-    SessionState *appState = arg;
-    handleConnection(appState);
-    closeSocket(appState->clientSocket);
+    SessionState *state = arg;
+    setCurrentThreadSessionState(state);
+    handleConnection(state);
+    info("Closing connection");
+    closeSocket(state->clientSocket);
     stop_alloc_tracking();
-    deallocate(arg);
     pthread_exit(NULL);
 }
 
 #define BUFFER_SIZE 1024
 
 void handleConnection(SessionState *appState) {
-    TcpStream stream = newTcpStream(appState->clientSocket.fd);
+    TcpStream stream = newTcpStream(&appState->clientSocket);
 
     while (handleRequest(appState, &stream)) {
+        appState->requestIndex++;
     }
 
     freeTcpStream(&stream);
 }
 
-int handleRequest(SessionState *appState, TcpStream *stream) {
+int handleRequest(SessionState *state, TcpStream *stream) {
     HttpReq request = {
-        .appState = appState
+        .appState = state
     };
     HttpResp resp;
-    tcpStreamWait(stream);
-    if (stream->error == TCP_STREAM_CLOSED || stream->error == TCP_STREAM_ERROR || stream->error == TCP_STREAM_TIMEOUT) {
-        return 0;
-    }
     int result = parseRequestStream(&request, stream);
-    int action = handleError(result, &appState->clientSocket, &request);
+    int action = handleError(result, &state->clientSocket, &request);
     switch (action) {
         case 1:
             freeReq(&request);
@@ -127,11 +118,22 @@ int handleRequest(SessionState *appState, TcpStream *stream) {
     resp = routeReq(router, request);
 
     logResponse(&resp, &request);
-    sendResponse(&resp, &appState->clientSocket);
+    WriteResult sendResult = sendResponse(&resp, &state->clientSocket);
+    switch (sendResult.result) {
+        case WRITE_OK:
+            break;
+        case WRITE_CLOSED:
+            warning("Peer closed connection while sending");
+            break;
+        case WRITE_TIMEOUT:
+            warning("Timeout while sending");
+            break;
+        default:
+            error("Failed sending response");
+    }
 
     freeResp(&resp);
     freeReq(&request);
-
     tcpStreamDrain(stream);
 
     return connectionKeepAlive;
@@ -143,26 +145,46 @@ int handleRequest(SessionState *appState, TcpStream *stream) {
  */
 int handleError(int result, TcpSocket *client, HttpReq *request) {
     HttpResp resp;
+    SessionState *state = request->appState;
     switch (result) {
         case TCP_STREAM_ERROR:
-            logError(request, "TCP Stream error");
-        case TCP_STREAM_CLOSED:
+            error("TCP Socket Had An Error.");
+            logErrorResponse(request, "TCP Stream error");
             return 1;
+
+        case TCP_STREAM_CLOSED:
+            info("TCP Socket Was Closed.");
+            return 1;
+
+        case TCP_STREAM_TIMEOUT:
+            info("Timeout Waiting For Client. Closing Connection.");
+            return 1;
+
         case ENTITY_TOO_LARGE_ERROR:
+            error("Received Entity Too Large.");
             resp = newResp(PAYLOAD_TOO_LARGE);
             break;
+
         case UNKNOWN_METHOD:
+            error("Received Unknown Method.");
             resp = newResp(METHOD_NOT_ALLOWED);
             break;
+
         case UNKNOWN_VERSION:
+            error("Received Unknown Version.");
             resp = newResp(HTTP_VERSION_NOT_SUPPORTED);
             break;
+
         case BAD_REQUEST_ERROR:
+            error("Received Bad Request.");
             resp = newResp(BAD_REQUEST);
             break;
+
         case URI_TOO_LARGE_ERROR:
+            error("Received URI Too Large.");
             resp = newResp(URI_TOO_LONG);
             break;
+
         default:
             return 0;
     }
@@ -171,79 +193,80 @@ int handleError(int result, TcpSocket *client, HttpReq *request) {
     return 2;
 }
 
-int sendResponse(HttpResp *resp, TcpSocket *client) {
+WriteResult sendResponse(HttpResp *resp, TcpSocket *client) {
     char stackBuffer[BUFFER_SIZE];
     int responseSize = buildRespStringUntilContent(resp, stackBuffer, BUFFER_SIZE);
+    WriteResult respResult, contentResult;
     if (responseSize > BUFFER_SIZE) {
         /* if stackBuffer not big enough */
         char *responseBuffer = allocate(responseSize);
         buildRespStringUntilContent(resp, responseBuffer, responseSize);
-        int result = sendAll(client, responseBuffer, responseSize);
-        if (result == -1) {
+        respResult = transmit(client, responseBuffer, responseSize);
+        if (respResult.result != WRITE_OK) {
             deallocate(responseBuffer);
-            return -1;
+            return respResult;
         }
-        result = sendContent(resp, client);
+        contentResult = sendContent(resp, client);
         deallocate(responseBuffer);
-        if (result == -1) {
-            return -1;
+        if (contentResult.result != WRITE_OK) {
+            contentResult.sent += respResult.sent;
+            return contentResult;
         }
     } else {
-        int result = sendAll(client, stackBuffer, responseSize);
-        if (result == -1) {
-            return -1;
+        respResult = transmit(client, stackBuffer, responseSize);
+        if (respResult.result != WRITE_OK) {
+            return respResult;
         }
-        result = sendContent(resp, client);
-        if (result == -1) {
-            return -1;
+        contentResult = sendContent(resp, client);
+        if (contentResult.result != WRITE_OK) {
+            contentResult.sent += respResult.sent;
+            return contentResult;
         }
     }
-    return 0;
+    return (WriteResult) {.result = WRITE_OK, .sent = contentResult.sent + respResult.sent};
 }
 
-int sendContent(HttpResp *resp, TcpSocket *client) {
+WriteResult sendContent(HttpResp *resp, TcpSocket *client) {
+    if (resp->contentLength == 0) {
+        return (WriteResult) {.result = WRITE_OK, .sent = 0};
+    }
     if (resp->isContentFile) {
+        debug("Sending file content %s", resp->content);
         return sendFile(resp, client);
     }
-    if (resp->contentLength > 0) {
-        return sendAll(client, resp->content, resp->contentLength);
-    }
-    return 0;
+    return transmit(client, resp->content, resp->contentLength);
 }
 
-int sendFile(HttpResp *resp, TcpSocket *client) {
+WriteResult sendFile(HttpResp *resp, TcpSocket *client) {
     int fd = open(resp->content, O_RDONLY);
     if (fd < 0) {
-        return -1;
+        char errorBuffer[256];
+        snprintf(errorBuffer, sizeof(errorBuffer), "Error opening file %s for sendFile\n", (char*) resp->content);
+        perror(errorBuffer);
+        return (WriteResult) {.result = WRITE_OPEN_ERROR, .sent = 0};
     }
 
     off_t offset = 0;
     off_t remaining = resp->contentLength;
 
     while (remaining > 0) {
-        off_t len = remaining;   // request this many
-        if (sendfile(fd, client->fd, offset, &len, NULL, 0) < 0) {
-            return -1;
+        WriteEnum writable = canWrite(client->fd, 10 * 1000);
+        if (writable != WRITE_OK) {
+            close(fd);
+            return (WriteResult) {.result = writable, .sent = offset};
         }
-        if (len == 0) {
-            break;
+        off_t tempOffset = offset;
+        ssize_t sent = sendfile(client->fd, fd, &offset, remaining);
+        debug("sendfile(%d, %d, %ld, %zu) returned %zd and changed offset to %ld", client->fd, fd, tempOffset, remaining, sent, offset);
+        if (sent <= 0) {
+            perror("sendfile");
+            close(fd);
+            return (WriteResult) {.result = WRITE_SENDFILE_ERROR, .sent = offset};
         }
-        offset    += len;
-        remaining -= len;
+        remaining -= sent;
     }
-    return 0;
-}
-
-int sendAll(TcpSocket *client, void *buffer, size_t size) {
-    size_t sent = 0;
-    while (sent < size) {
-        ssize_t packetSize = send(client->fd, buffer + sent, MIN(size - sent, 1 << 20), 0);
-        if (packetSize == -1) {
-            return -1;
-        }
-        sent += packetSize;
-    }
-    return 0;
+    close(fd);
+    return (WriteResult) {.result = WRITE_OK, .sent = resp->contentLength};
 }
 
 void addEndpoint(char *path, HttpReqHandler handler) {

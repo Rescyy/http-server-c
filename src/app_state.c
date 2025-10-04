@@ -7,22 +7,30 @@
 #include "app_state.h"
 #include "alloc.h"
 
-static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-// static GlobalState appState = {
-// };
 
-SessionState *newSessionAppState() {
-    return allocate(sizeof(SessionState));
+SessionState *newSessionState() {
+    SessionState *state = allocate(sizeof(SessionState));
+    state->requestIndex = 1;
 }
 
-// GlobalState *getAppState() {
-//     pthread_mutex_lock(&mutex);
-//     return &appState;
-// }
+static pthread_key_t sessionStateKey;
+static pthread_once_t sessionStateKeyOnce = PTHREAD_ONCE_INIT;
 
-void releaseAppState() {
-    pthread_mutex_unlock(&mutex);
+static void freeSessionState(void *state) {
+    deallocate(state);
 }
 
+static void createSessionStateKey() {
+    pthread_key_create(&sessionStateKey, freeSessionState);
+}
+
+void setCurrentThreadSessionState(SessionState *state) {
+    pthread_once(&sessionStateKeyOnce, createSessionStateKey);
+    pthread_setspecific(sessionStateKey, state);
+}
+
+SessionState *getCurrentThreadSessionState() {
+    return pthread_getspecific(sessionStateKey);
+}
 
 

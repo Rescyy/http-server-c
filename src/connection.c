@@ -12,6 +12,12 @@
 #include <stdio.h>
 #include <errno.h>
 #include <assert.h>
+#include <poll.h>
+#include <pthread.h>
+
+#include "alloc.h"
+#include "logging.h"
+#include "utils.h"
 
 /*
     return TcpSocket;
@@ -26,8 +32,7 @@ TcpSocket socketListen(port_t port)
     struct addrinfo hints, *res;
     TcpSocket sock = {
         .fd = 0,
-        .errorType = 0,
-        .error = 0,
+        .closed = 0,
     };
 
     assert(strnlen(port, 6) < 6);
@@ -39,8 +44,8 @@ TcpSocket socketListen(port_t port)
 
     if ((status = getaddrinfo(NULL, port, &hints, &res)) != 0)
     {
-        sock.errorType = EGAI;
-        sock.error = status;
+        fprintf(stderr, "socketConnect: getaddrinfo; %s\n", gai_strerror(status));
+        sock.closed = 1;
         return sock;
     }
 
@@ -48,8 +53,8 @@ TcpSocket socketListen(port_t port)
     if ((sockfd = socket(res->ai_family, res->ai_socktype, res->ai_flags)) == -1)
     {
         freeaddrinfo(res);
-        sock.errorType = ESOCK;
-        sock.error = errno;
+        sock.closed = 1;
+        perror("socketListen: socket");
         return sock;
     }
 
@@ -57,16 +62,16 @@ TcpSocket socketListen(port_t port)
     {
         freeaddrinfo(res);
         close(sockfd);
-        sock.errorType = ESOCK;
-        sock.error = errno;
+        sock.closed = 1;
+        perror("socketListen: setsockopt");
         return sock;
     }
     if (setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &(int){1}, sizeof(int)) == -1)
     {
         freeaddrinfo(res);
         close(sockfd);
-        sock.errorType = ESOCK;
-        sock.error = errno;
+        sock.closed = 1;
+        perror("socketListen: setsockopt");
         return sock;
     }
 
@@ -74,8 +79,8 @@ TcpSocket socketListen(port_t port)
     {
         freeaddrinfo(res);
         close(sockfd);
-        sock.errorType = ESOCK;
-        sock.error = errno;
+        sock.closed = 1;
+        perror("socketListen: bind");
         return sock;
     }
 
@@ -84,8 +89,8 @@ TcpSocket socketListen(port_t port)
     if ((status = listen(sockfd, 20)) == -1)
     {
         close(sockfd);
-        sock.errorType = ESOCK;
-        sock.error = errno;
+        sock.closed = 1;
+        perror("socketListen: listen");
         return sock;
     }
 
@@ -102,23 +107,19 @@ TcpSocket acceptConnection(TcpSocket sock)
 {
     TcpSocket conn = {
         .fd = 0,
-        .error = 0,
+        .closed = 0,
     };
     int clientfd, sockfd = sock.fd;
 
     if ((clientfd = accept(sockfd, NULL, NULL)) == -1)
     {
-        conn.error = errno;
+        conn.closed = 1;
         return conn;
     }
 
     conn.fd = clientfd;
 
-    if (getClientIp(clientfd, conn.ip) == -1)
-    {
-        conn.error = errno;
-        return conn;
-    }
+    getClientIp(clientfd, conn.ip);
 
     return conn;
 }
@@ -135,7 +136,7 @@ TcpSocket socketConnect(char *host, port_t port)
     int sockfd, status;
     TcpSocket conn = {
         .fd = 0,
-        .error = 0,
+        .closed = 0,
     };
 
     memset(&hints, 0, sizeof hints);
@@ -145,22 +146,22 @@ TcpSocket socketConnect(char *host, port_t port)
 
     if ((status = getaddrinfo(host, port, &hints, &res)) != 0)
     {
-        conn.errorType = EGAI;
-        conn.error = status;
+        fprintf(stderr, "socketConnect: getaddrinfo; %s\n", gai_strerror(status));
+        conn.closed = 1;
         return conn;
     }
 
     if ((sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1)
     {
-        conn.errorType = ESOCK;
-        conn.error = errno;
+        perror("socketConnect: socket");
+        conn.closed = 1;
         return conn;
     }
 
     if (connect(sockfd, res->ai_addr, res->ai_addrlen) == -1)
     {
-        conn.errorType = ESOCK;
-        conn.error = errno;
+        perror("socketConnect: connect");
+        conn.closed = 1;
         return conn;
     }
 
@@ -173,52 +174,161 @@ void closeSocket(TcpSocket sock)
     close(sock.fd);
 }
 
-static char noErrorString[] = "No error";
-static char unreachableErrorString[] = "Unreachable error";
+ReadEnum canRead(int fd, int timeoutMs) {
+    struct pollfd pfd;
+    pfd.fd = fd;
+    pfd.events = POLLIN;
 
-const char *getSocketErrorString(TcpSocket sock)
-{
-    switch (sock.errorType)
-    {
-    case NO_ERROR:
-        return noErrorString;
-    case ESOCK:
-        return strerror(sock.error);
-    case EGAI:
-        return gai_strerror(sock.error);
-    default:
-        return unreachableErrorString;
+    int ret = poll(&pfd, 1, timeoutMs);
+    debug("poll({.fd = %d, .events = POLLIN}, 1, %d) returned %d and set .revents to %04x", fd, timeoutMs, ret, pfd.revents);
+    if (ret == -1) {
+        perror("canRead: poll");
+        return READ_POLL_ERROR;
     }
-}
-
-int hasError(TcpSocket sock)
-{
-    return sock.errorType > 0;
-}
-
-void clearSocketError(TcpSocket *sock)
-{
-    sock->error = 0;
-    sock->errorType = 0;
-}
-
-void receive(TcpSocket *sock, void *buffer, size_t size)
-{
-    if (recv(sock->fd, buffer, size, 0) == -1)
-    {
-        sock->errorType = ESOCK;
-        sock->error = errno;
+    if (ret == 0) {
+        return READ_TIMEOUT;
     }
+    if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+        return READ_CLOSED;
+    }
+    return READ_OK;
 }
 
-void transmit(TcpSocket *sock, void *buffer, size_t size)
-{
-    if (send(sock->fd, buffer, size, 0) == -1)
-    {
-        sock->errorType = ESOCK;
-        sock->error = errno;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+ReadResult receive(TcpSocket *sock, void *buffer, size_t size) {
+    if (sock->closed) {
+        return (ReadResult) {
+            .result = READ_CLOSED,
+            .received = 0,
+        };
     }
+
+    ReadEnum readable = canRead(sock->fd, 60 * 1000);
+
+    if (readable != READ_OK) {
+        sock->closed = 1;
+        return (ReadResult) {
+            .result = readable,
+            .received = -1,
+        };
+    }
+
+    ssize_t recvd = recv(sock->fd, buffer, size, 0);
+    debug("recv(%d, %p, %zu, 0) returned %zd", sock->fd, buffer, size, recvd);
+
+    if (recvd == 0) {
+        sock->closed = 1;
+        return (ReadResult) {
+            .result = READ_CLOSED,
+            .received = 0,
+        };
+    }
+
+    if (recvd == -1) {
+        perror("receive: recv");
+        sock->closed = 1;
+        return (ReadResult) {
+            .result = READ_RECV_ERROR,
+            .received = -1,
+        };
+    }
+
+    char *time = getCurrentFormattedTime();
+    pthread_mutex_lock(&mutex);
+    FILE *socketFile = fopen("socketLog.txt", "ab");
+    fprintf(socketFile, "%s Received %zd bytes\nbegin:\n", time, recvd);
+    fwrite(buffer, 1, recvd, socketFile);
+    fclose(socketFile);
+    pthread_mutex_unlock(&mutex);
+    deallocate(time);
+
+    return (ReadResult) {
+        .result = READ_OK,
+        .received = recvd,
+    };
 }
+
+WriteEnum canWrite(int fd, int timeoutMs) {
+    struct pollfd pfd;
+    pfd.fd = fd;
+    pfd.events = POLLOUT;
+
+    int ret = poll(&pfd, 1, timeoutMs);
+    debug("poll({.fd = %d, .events = POLLOUT}, 1, %d) returned %d and set .revents to %04x", fd, timeoutMs, ret, pfd.revents);
+    if (ret == -1) {
+        perror("canWrite: poll");
+        return WRITE_POLL_ERROR;
+    }
+    if (ret == 0) {
+        return WRITE_TIMEOUT;
+    }
+    if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+        return WRITE_CLOSED;
+    }
+    return WRITE_OK;
+}
+
+WriteResult transmit(TcpSocket *sock, void *buffer, size_t size) {
+    if (sock->closed) {
+        return (WriteResult) {
+            .result = WRITE_CLOSED,
+            .sent = 0,
+        };
+    }
+    size_t totalSent = 0;
+
+    while (totalSent < size) {
+        // Wait until writable (10s timeout per chunk)
+        WriteEnum writable = canWrite(sock->fd, 10 * 1000);
+        if (writable != WRITE_OK) {
+            sock->closed = 1;
+            return (WriteResult) {
+                .result = writable,
+                .sent = totalSent, // return how much was actually sent
+            };
+        }
+
+        // Send up to 1 MB at a time
+        size_t packetSize = (size - totalSent) > (1 << 20) ? (1 << 20) : (size - totalSent);
+        ssize_t sent = send(sock->fd, (char*)buffer + totalSent, packetSize, 0);
+        debug("send(%d, %p, %zu, 0) return %zd", sock->fd, buffer, packetSize, sent);
+
+        if (sent == -1) {
+            perror("transmit: send");
+            sock->closed = 1;
+            return (WriteResult) {
+                .result = WRITE_SEND_ERROR,
+                .sent = totalSent,
+            };
+        }
+
+        if (sent == 0) {
+            sock->closed = 1;
+            return (WriteResult) {
+                .result = WRITE_CLOSED,
+                .sent = totalSent,
+            };
+        }
+
+        char *time = getCurrentFormattedTime();
+        pthread_mutex_lock(&mutex);
+        FILE *socketFile = fopen("socketLog.txt", "ab");
+        fprintf(socketFile, "%s Sent %zd bytes\nbegin:\n", time, sent);
+        fwrite(buffer + totalSent, 1, sent, socketFile);
+        fclose(socketFile);
+        pthread_mutex_unlock(&mutex);
+        deallocate(time);
+
+        totalSent += sent;
+    }
+
+    return (WriteResult) {
+        .result = WRITE_OK,
+        .sent = totalSent,
+    };
+}
+
 
 int getClientIp(int fd, char *str)
 {
@@ -227,6 +337,7 @@ int getClientIp(int fd, char *str)
     int status = getpeername(fd, (struct sockaddr *)&addr, &addr_size);
     if (status == -1)
     {
+        perror("getClientIp: getpeername");
         return -1;
     }
     inet_ntop(AF_INET, &addr.sin_addr, str, INET_ADDRSTRLEN);

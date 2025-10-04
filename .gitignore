@@ -3,3 +3,4 @@ allocations.txt
 cmake-build-debug
 *.iml
 */.gitignore
+.idea

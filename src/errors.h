@@ -14,4 +14,6 @@
 #define TCP_STREAM_CLOSED -7
 #define TCP_STREAM_TIMEOUT -8
 
+const char* errToStr(int error);
+
 #endif //ERRORS_H

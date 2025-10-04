@@ -7,11 +7,12 @@
 
 #include "utils.h"
 #include "errors.h"
+#include "connection.h"
 
 #define TCP_STREAM_BUFFER_SIZE 1024
 
 typedef struct TcpStream {
-    int fd;
+    TcpSocket *socket;
     int error;
     size_t cursor;
     size_t length;
@@ -20,29 +21,22 @@ typedef struct TcpStream {
 } TcpStream;
 
 /* Creates a blocking TcpStream. */
-TcpStream newTcpStream(int fd);
+TcpStream newTcpStream(TcpSocket *socket);
 /* Frees allocated buffer in the tcp stream. */
 void freeTcpStream(TcpStream *stream);
 /* Waits for data to be available. */
 void tcpStreamWait(TcpStream *stream);
 /* Fills the internal buffer at least length. */
 void tcpStreamFill(TcpStream *stream, size_t length);
-/* Advances the cursor by size. Writes in the buffer. */
-void tcpStreamRead(TcpStream *stream, void *buffer, size_t size);
 /* Advances the cursor by size. Returns ptr. */
 void *tcpStreamReadSlice(TcpStream *stream, size_t size);
 /* Drains internal buffer until cursor. Performs memmove. */
 void tcpStreamDrain(TcpStream *stream);
-/* Reads and returns one byte at cursor, moves the cursor. */
-char tcpStreamGetc(TcpStream *stream);
-/* Reads and returns one byte at index. */
-char tcpStreamIndex(TcpStream *stream, size_t index);
 /* Reads until space character. */
 string tcpStreamReadUntilSpace(TcpStream *stream, size_t maxLength);
 /* Read until carriage return and new line. */
 string tcpStreamReadUntilCRLF(TcpStream *stream, size_t maxLength, int ignoreLoneCRLF);
 /* Read until string, returns the slice with length not including the substr. */
 string tcpStreamReadUntilString(TcpStream *stream, size_t maxLength, const char *str, size_t size);
-int tcpStreamHasError(TcpStream *stream);
 
 #endif //TCP_STREAM_H

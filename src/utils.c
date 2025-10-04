@@ -3,10 +3,11 @@
 //
 
 #include "utils.h"
+#include "alloc.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
-
+#include <time.h>
 
 /*
  * Find the first occurrence of find in s, where the search is limited to the
@@ -111,4 +112,24 @@ unsigned int hash(void *_data, int len)
     hash += hash >> 6;
 
     return hash;
+}
+
+char *getCurrentFormattedTime() {
+    char *formattedTime = allocate(256);
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+
+    // convert to local time
+    struct tm tm_info;
+    gmtime_r(&ts.tv_sec, &tm_info);
+
+    // format up to seconds
+    strftime(formattedTime, 256, "%Y-%m-%d %H:%M:%S", &tm_info);
+
+    // append milliseconds
+    char millis[8];
+    snprintf(millis, sizeof(millis), ".%03ld", ts.tv_nsec / 1000000);
+    strncat(formattedTime, millis, 256 - strlen(formattedTime) - 1);
+
+    return formattedTime;
 }

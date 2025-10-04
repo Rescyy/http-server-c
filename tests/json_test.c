@@ -582,6 +582,10 @@ int test34() {
             _JProperty("-0.1e23", -0.1e23)
         )
     );
+    char *result1;
+    char *result2;
+    serializeJson(token.var, &result1, 4);
+    serializeJson(expectedToken, &result2, 4);
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
 
@@ -737,6 +741,45 @@ int test44() {
     return testResult;
 }
 
+int test45() {
+    int testResult = 1;
+
+    char errorString[] = "";
+
+    RESULT_T(JToken) token = deserializeJson(errorString, strlen(errorString));
+    EXPECT(!token.ok);
+
+    return testResult;
+}
+
+int test46() {
+    int testResult = 1;
+
+    char emptyListString[] = "[]";
+    RESULT_T(JToken) token = deserializeJson(emptyListString, strlen(emptyListString));
+    JToken expectedToken = _JToken(_JListEmpty());
+    EXPECT(token.ok);
+    EXPECT(equalsJson(&token.var, &expectedToken));
+
+    freeJson(&token.var);
+
+    return testResult;
+}
+
+int test47() {
+    int testResult = 1;
+
+    char emptyObjectString[] = "{}";
+    RESULT_T(JToken) token = deserializeJson(emptyObjectString, strlen(emptyObjectString));
+    JToken expectedToken = _JToken(_JObjectEmpty());
+    EXPECT(token.ok);
+    EXPECT(equalsJson(&token.var, &expectedToken));
+
+    freeJson(&token.var);
+
+    return testResult;
+}
+
 int main()
 {
     INIT_UNIT_TESTS
@@ -784,6 +827,9 @@ int main()
     UNIT_TEST(test42)
     UNIT_TEST(test43)
     UNIT_TEST(test44)
+    UNIT_TEST(test45)
+    UNIT_TEST(test46)
+    UNIT_TEST(test47)
     TEST_RESULTS
     return total - passed;
 }

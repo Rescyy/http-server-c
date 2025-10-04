@@ -15,6 +15,8 @@
 #include <sys/stat.h>
 #include <errno.h>
 
+#include "logging.h"
+
 const char *statusToStr(HttpStatus status)
 {
     static const char ok[] = "OK";
@@ -462,7 +464,7 @@ void respBuilderSetFileContent(HttpRespBuilder *builder, const char *filePath)
     {
         if (errno == ENOENT)
         {
-            respBuilderSetStatus(builder, NOT_FOUND);
+            respBuilderSetStatus(builder, SERVICE_UNAVAILABLE);
         }
         else
         {
@@ -474,8 +476,8 @@ void respBuilderSetFileContent(HttpRespBuilder *builder, const char *filePath)
     {
         size_t size = st.st_size;
         size_t pathSize = strlen(filePath);
-        char *content = malloc(pathSize + 1);
-        strncpy(content, filePath, pathSize);
+        char *content = allocate(pathSize + 1);
+        snprintf(content, pathSize + 1, "%s", filePath);
         builder->resp.isContentFile = 1;
         builder->resp.content = content;
         builder->resp.contentLength = size;
@@ -543,6 +545,7 @@ HttpResp respBuild(HttpRespBuilder *builder)
         addHeader(builder, "Server", "http-server-c");
     }
     setRespStatus(builder);
+    debug("Response content length [%zu] file [%d]", builder->resp.contentLength, builder->resp.isContentFile);
     return builder->resp;
 }
 

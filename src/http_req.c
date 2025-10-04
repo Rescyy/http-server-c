@@ -12,6 +12,8 @@
 #include "http_req.h"
 #include "utils.h"
 #include "tcp_stream.h"
+#include "errors.h"
+#include "logging.h"
 
 int findContentLength(HttpHeaders headers);
 
@@ -29,100 +31,114 @@ HttpReq newRequest()
 }
 
 /* Parse HTTP request, returns the amount of bytes needed additionally read from the TCP socket based on the Content-Length header */
-int parseRequestStream(HttpReq *reqObj, TcpStream *stream)
+int parseRequestStream(HttpReq *req, TcpStream *stream)
 {
+    SessionState *state = req->appState;
     int returnValue = 0;
     /* Parse method */
     {
         string method = tcpStreamReadUntilSpace(stream, 7);
-        if (method.length == TCP_STREAM_ERROR || method.length == ENTITY_TOO_LARGE_ERROR || method.length == TCP_STREAM_CLOSED)
+        if (method.length < 0)
         {
             returnValue = method.length;
-            goto MethodError;
+            if (method.length != TCP_STREAM_CLOSED) {
+                error("Error Parsing Method: %s", errToStr(returnValue));
+            }
+            goto _ErrorReturn;
         }
-        reqObj->method = strnToMethod(method.ptr, method.length);
-        if (reqObj->method == METHOD_UNKNOWN)
+        req->method = strnToMethod(method.ptr, method.length);
+
+        if (req->method == METHOD_UNKNOWN)
         {
             returnValue = UNKNOWN_METHOD;
-            goto MethodError;
+            error("Error parsing Method UNKNOWN");
+            goto _ErrorReturn;
         }
     }
 
     /* Parse path */
     {
         string path = tcpStreamReadUntilSpace(stream, 1024);
-        if (path.length == TCP_STREAM_ERROR || path.length == TCP_STREAM_CLOSED)
+        if (path.length < 0)
         {
             returnValue = path.length;
-            goto PathError;
+            if (path.length != TCP_STREAM_CLOSED) {
+                error("Error Parsing Path: %s", errToStr(returnValue));
+            }
+            goto _ErrorReturn;
         }
-        if (path.length == ENTITY_TOO_LARGE_ERROR)
-        {
-            returnValue = URI_TOO_LARGE_ERROR;
-            goto PathError;
-        }
-        if (parsePath(&reqObj->path, path.ptr, path.length) == -1)
+        if (parsePath(&req->path, path.ptr, path.length) == -1)
         {
             returnValue = BAD_REQUEST_ERROR;
-            goto PathError;
+            goto _ErrorReturn;
         }
     }
 
     /* Parse version */
     {
         string version = tcpStreamReadUntilCRLF(stream, 8, 0);
-        if (version.length == TCP_STREAM_ERROR || version.length == TCP_STREAM_CLOSED)
+        if (version.length < 0 && version.length != ENTITY_TOO_LARGE_ERROR)
         {
             returnValue = version.length;
-            goto VersionError;
+            if (version.length != TCP_STREAM_CLOSED) {
+                error("Error Parsing Version: %s\n", errToStr(returnValue));
+            }
+            goto _ErrorReturn;
         }
         if (!isVersionValid(version.ptr, version.length) || version.length == ENTITY_TOO_LARGE_ERROR)
         {
             returnValue = UNKNOWN_VERSION;
-            goto VersionError;
+            error("Error Parsing Version TOO LARGE\n");
+            goto _ErrorReturn;
         }
-        reqObj->version = allocate(version.length + 1);
-        strncpy(reqObj->version, version.ptr, version.length);
+        req->version = allocate(version.length + 1);
+        strncpy(req->version, version.ptr, version.length);
     }
 
     /* Parse headers */
     {
-        int result = parseHeadersStream(&reqObj->headers, stream);
+        int result = parseHeadersStream(&req->headers, stream);
         if (result < 0)
         {
             returnValue = result;
-            goto HeaderError;
+            if (result != TCP_STREAM_CLOSED) {
+                error("Error Parsing Headers %s\n", errToStr(result));
+            }
+            goto _ErrorReturn;
         }
     }
 
     /* Fetch content */
     {
-        reqObj->contentLength = findContentLength(reqObj->headers);
-        if (reqObj->contentLength > 0)
+        req->contentLength = findContentLength(req->headers);
+        if (req->contentLength > 0)
         {
-            reqObj->content = tcpStreamReadSlice(stream, reqObj->contentLength);
-            if (tcpStreamHasError(stream))
+            req->content = tcpStreamReadSlice(stream, req->contentLength);
+            if (stream->error < 0)
             {
-                goto ContentError;
+                returnValue = stream->error;
+                if (stream->error != TCP_STREAM_CLOSED) {
+                    error("Error Fetching Content: %s\n", errToStr(stream->error));
+                }
+                goto _ErrorReturn;
             }
         }
         else
         {
-            reqObj->content = NULL;
+            req->content = NULL;
         }
     }
 
+    req->raw = stream->buffer;
+    req->rawLength = stream->cursor;
+
     return 0;
-ContentError:
-    reqObj->content = NULL;
-    freeHeaders(&reqObj->headers);
-HeaderError:
-    deallocate(reqObj->version);
-VersionError:
-    freePath(&reqObj->path);
-PathError:
-MethodError:
-    return returnValue == 0 ? -1 : returnValue;
+_ErrorReturn:
+    req->content = NULL;
+    freeHeaders(&req->headers);
+    deallocate(req->version);
+    freePath(&req->path);
+    return returnValue;
 }
 
 int findContentLength(HttpHeaders headers)
@@ -203,7 +219,8 @@ int parsePath(HttpPath *path, const char *str, int n)
     path->elCount = 0;
     path->elements = NULL;
     path->raw = allocate(n + 1);
-    strncpy(path->raw, str, n);
+    snprintf(path->raw, n + 1, "%s", str);
+    path->raw[n] = '\0';
     char *element;
     if (str[prevOffset++] != '/')
         return -1;
@@ -255,6 +272,9 @@ int parsePath(HttpPath *path, const char *str, int n)
 
 void freePath(HttpPath *path)
 {
+    if (path->elements == NULL) {
+        return;
+    }
     for (int i = 0; i < path->elCount; i++)
     {
         deallocate(path->elements[i]);

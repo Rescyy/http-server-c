@@ -83,7 +83,8 @@ size_t serializeJson(JToken element, char **buffer, int indent);
 RESULT_T(JToken) deserializeJson(const char *buffer, size_t len);
 void freeJson(JToken *token);
 int equalsJson(JToken *a, JToken *b);
-JToken *getValueJObject(JObject *object, char *buffer, size_t len);
+JToken *getValueJObject(JObject *object, JString *key);
+void addProperty(JObject *object, const char *key, JToken *token);
 
 JToken toJToken_JObject(JObject object);
 JToken toJToken_JList(JList array);
@@ -92,6 +93,7 @@ JToken toJToken_JNumber(JNumber number);
 JToken toJToken_JBool(JBool boolean);
 JToken toJToken_double(double number);
 JToken toJToken_int(int number);
+JToken toJToken_long(long number);
 JToken toJToken_bool(bool boolean);
 JToken toJToken_string(ARRAY_T(char) string);
 JToken toJToken_cstring(char *cstring);
@@ -108,6 +110,7 @@ JString _JStringEmpty();
     JBool: toJToken_JBool,\
     double: toJToken_double,\
     int: toJToken_int,\
+    long: toJToken_long,\
     bool: toJToken_bool,\
     char *: toJToken_cstring,\
     const char*: toJToken_cstring,\

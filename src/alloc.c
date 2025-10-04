@@ -210,6 +210,7 @@ void _deallocateTrack(void *ptr, const char *file, int line)
 
 void *_reallocateTrack(void *ptr, size_t size, const char *file, int line)
 {
+    if (ptr == NULL) return _allocateTrack(size, file, line);
     void *newPtr = _reallocate(ptr, size);
     log_write("Free",  file, line, 0, ptr);
     track_update(ptr, newPtr, size, file, line);
@@ -221,6 +222,7 @@ void *_reallocateTrack(void *ptr, size_t size, const char *file, int line)
 
 void *_allocate(size_t size)
 {
+    if (size == 0) return NULL;
     void *ptr = malloc(size);
     exitIfOutOfMemory(ptr);
     return ptr;
@@ -228,6 +230,8 @@ void *_allocate(size_t size)
 
 void *_reallocate(void *ptr, size_t size)
 {
+    if (size == 0) return NULL;
+    if (ptr == NULL) return _allocate(size);
     void *newPtr = realloc(ptr, size);
     exitIfOutOfMemory(newPtr);
     return newPtr;
@@ -235,5 +239,6 @@ void *_reallocate(void *ptr, size_t size)
 
 void _deallocate(void *ptr)
 {
+    if (ptr == NULL) return;
     free(ptr);
 }

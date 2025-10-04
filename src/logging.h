@@ -13,10 +13,26 @@
 #define FILE_LOG 1 << 1
 #define JSON_LOG 1 << 2
 
+typedef enum {
+    DEBUG = 0,
+    INFO,
+    WARNING,
+    ERROR,
+    FATAL,
+} LogLevel;
+
+void debug(const char *format, ...);
+void info(const char *format, ...);
+void warning(const char *format, ...);
+void error(const char *format, ...);
+void fatal(const char *format, ...);
 void setLogFile(const char *path);
+void setJsonLogFile(const char *path);
+void setSocketLogFile(const char *path);
 void setLogFlags(int flags);
 void logResponse(HttpResp *resp, HttpReq *req);
-void logError(HttpReq *req, const char *error);
+void logErrorResponse(HttpReq *req, const char *error);
 void printError(HttpReq *req, TcpSocket *client);
+void initLogging();
 
 #endif //LOGGING_H

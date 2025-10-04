@@ -6,11 +6,11 @@
 #define UTILS_H
 
 #include <string.h>
-
+#include <sys/types.h>
 
 typedef struct string {
     char *ptr;
-    size_t length;
+    ssize_t length;
 } string;
 
 char *strnstr(const char *s, const char *find, size_t slen);
@@ -18,5 +18,6 @@ int strindex(const char *str, const char *find);
 int strnindex(const char *str, int n, const char *find);
 int isAlpha(char c);
 unsigned int hash(void *data, int len);
+char *getCurrentFormattedTime();
 
 #endif

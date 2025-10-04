@@ -444,6 +444,7 @@ static RESULT_T(JList) deserializeList(buffer_t *buffer) {
     SKIP_WHITESPACE(JList, goto _returnError);
     if (CHAR == ']') {
         JList list = _JListEmpty();
+        ADD(1);
         return RESULT_FROM_VAR(JList, list);
     }
     ARRAY_T(JToken) tokens = ARRAY_NEW(JToken);
@@ -550,6 +551,7 @@ int equalsJson(JToken *token1, JToken *token2) {
 }
 
 static int equalsToken(JToken *token1, JToken *token2) {
+    if (token1 == NULL || token2 == NULL) return 0;
     if (token1 == token2) return 1;
     if (token1->type != token2->type) return 0;
     JValue *value1 = &token1->literal, *value2 = &token2->literal;
@@ -579,8 +581,7 @@ static int equalsString(JString *string1, JString *string2) {
 static int equalsObject(JObject *object1, JObject *object2) {
     if (object1->count != object2->count) return 0;
     for (size_t i = 0; i < object1->count; i++) {
-        JString *key = &object1->properties[i].key;
-        JToken *token = getValueJObject(object2, key->value, key->size);
+        JToken *token = getValueJObject(object2, &object1->properties[i].key);
         if (!equalsToken(token, &object1->properties[i].value)) return 0;
     }
     return 1;
@@ -602,14 +603,24 @@ static int equalsBoolean(JBool *boolean1, JBool *boolean2) {
     return boolean1->value == boolean2->value;
 }
 
-JToken *getValueJObject(JObject *object, char *buffer, size_t len) {
+JToken *getValueJObject(JObject *object, JString *key) {
     for (size_t i = 0; i < object->count; i++) {
-        JString *key = &object->properties[i].key;
-        if (strncmp(buffer, key->value, MIN(key->size, len)) == 0) {
+        JString *key2 = &object->properties[i].key;
+        if (equalsString(key, key2)) {
             return &object->properties[i].value;
         }
     }
     return NULL;
+}
+
+void addProperty(JObject *object, const char *key, JToken *token) {
+    size_t keyLen = strlen(key);
+    char *copiedKey = malloc(keyLen + 1);
+    memcpy(copiedKey, key, keyLen);
+    JString keyString = {.size = keyLen, .value = copiedKey};
+    JProperty property = {.key = keyString, .value = *token};
+    object->properties = reallocate(object->properties, sizeof(JProperty) * (object->count + 1));
+    object->properties[object->count++] = property;
 }
 
 JToken toJToken_JObject(JObject object) {
@@ -655,6 +666,13 @@ JToken toJToken_double(double number) {
 }
 
 JToken toJToken_int(int number) {
+    return (JToken) {
+        .literal = (JValue) {.number = (JNumber) {.value = number}},
+        .type = JSON_NUMBER,
+    };
+}
+
+JToken toJToken_long(long number) {
     return (JToken) {
         .literal = (JValue) {.number = (JNumber) {.value = number}},
         .type = JSON_NUMBER,
@@ -745,4 +763,3 @@ JList toJList_JTokens(const unsigned int count, ...) {
     va_end(args);
     return list;
 }
-

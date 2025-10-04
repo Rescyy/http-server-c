@@ -6,16 +6,14 @@
 #define APP_STATE_H
 #include "connection.h"
 
-// typedef struct {
-// } GlobalState;
-
 typedef struct {
-    unsigned long connectionIndex;
     TcpSocket clientSocket;
+    unsigned long connectionIndex;
+    unsigned long requestIndex;
 } SessionState;
 
-SessionState *newSessionAppState();
-// GlobalState *getAppState();
-void releaseAppState();
+SessionState *newSessionState();
+void setCurrentThreadSessionState(SessionState *state);
+SessionState *getCurrentThreadSessionState();
 
 #endif //APP_STATE_H

@@ -36,10 +36,12 @@ typedef struct HttpReq {
     void *content;
     int contentLength;
     SessionState *appState;
+    void *raw;
+    size_t rawLength;
 } HttpReq;
 
 HttpReq newRequest();
-int parseRequestStream(HttpReq *reqObj, TcpStream *stream);
+int parseRequestStream(HttpReq *req, TcpStream *stream);
 const char *methodToStr(HttpMethod method);
 HttpMethod strnToMethod(const char *str, int n);
 int parsePath(HttpPath *path, const char *str, int n);

@@ -70,7 +70,7 @@ int parseHeadersStream(HttpHeaders *headers, TcpStream *stream)
     for (;;)
     {
         tcpStreamFill(stream, stream->cursor + 2);
-        if (tcpStreamHasError(stream))
+        if (stream->error != 0)
         {
             freeHeaders(headers);
             return stream->error;
@@ -107,6 +107,9 @@ int parseHeadersStream(HttpHeaders *headers, TcpStream *stream)
 
 void freeHeaders(HttpHeaders *headers)
 {
+    if (headers->arr == NULL) {
+        return;
+    }
     for (int i = 0; i < headers->count; i++)
     {
         deallocate(headers->arr[i].key);
