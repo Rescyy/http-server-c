@@ -1,39 +1,41 @@
 ﻿FROM ubuntu:24.04 AS build
 LABEL authors="Rescyy"
 
+# Install build tools and ASan library for compilation
 RUN apt-get update && apt-get install -y \
     cmake \
     gcc \
     g++ \
     make \
-    && rm -rf /var/lib/apt/lists/*
+    libasan8 \
+ && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Copy project files
 COPY . .
 
-# Configure and build (with tests enabled)
+# Configure and build (ASan flags already set in CMakeLists.txt)
 RUN cmake -S . -B build \
- && cmake --build build
+ && cmake --build build --parallel
 
 # ----------------------------
 # Runtime stage
 # ----------------------------
-FROM ubuntu:latest
+FROM ubuntu:24.04
+
+# Install only the runtime ASan library (needed by instrumented binary)
+RUN apt-get update && apt-get install -y libasan8 \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy compiled binary and tests
+# Copy compiled binary
 COPY --from=build /app/build/httpserverc .
-#COPY --from=build /app/build/tests ./tests
 
+# Copy resources
 COPY resources ./resources
 COPY assets ./assets
 
-# Expose port if your app listens on one (example: 8080)
 EXPOSE 8080
 
-# Default run main application
 CMD ["./httpserverc"]

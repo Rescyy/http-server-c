@@ -11,9 +11,11 @@
 #include <stdarg.h>
 #include <errno.h>
 
+#include "logging.h"
+
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-DEFINE_ARRAY_FUNCS(char)
+DEFINE_ARRAY_FUNCS(char, gcAllocate, gcReallocate)
 
 static void serializeElement(JToken element, ARRAY_T(char) *buffer, int indentDepth, int indent);
 static void serializeObject(JObject object, ARRAY_T(char) *buffer, int indentDepth, int indent);
@@ -112,61 +114,63 @@ static void serializeList(JList array, ARRAY_T(char) *buffer, int indentDepth, i
     ARRAY_PUSH(char, buffer, ']');
 }
 
-static void pushSpecialCharacter(ARRAY_T(char) *buffer, int *specialCharacters, unsigned int newCap, char c) {
-    ARRAY_ENSURE_CAPACITY(char, buffer, newCap + (++*specialCharacters));
-    buffer->data[buffer->length++] = '\\';
-    buffer->data[buffer->length++] = c;
+static void pushSpecialCharacter(ARRAY_T(char) *buffer, char c) {
+    ARRAY_PUSH(char, buffer, '\\');
+    ARRAY_PUSH(char, buffer, c);
 }
 
 static void serializeString(JString string_, ARRAY_T(char) *buffer) {
+
+    ARRAY_ENSURE_CAPACITY(char, buffer, buffer->length + 2 * string_.size);
     ARRAY_PUSH(char, buffer, '"');
-    unsigned int newCap = buffer->capacity + string_.size;
-    ARRAY_ENSURE_CAPACITY(char, buffer, newCap);
-    int specialCharacters = 0;
     for (unsigned int i = 0; i < string_.size; i++) {
         char c = string_.value[i];
         switch (c) {
             case '"':
             case '/':
             case '\\':
-                pushSpecialCharacter(buffer, &specialCharacters, newCap, c);
+                pushSpecialCharacter(buffer, c);
                 break;
             case '\b':
-                pushSpecialCharacter(buffer, &specialCharacters, newCap, 'b');
+                pushSpecialCharacter(buffer, 'b');
                 break;
             case '\f':
-                pushSpecialCharacter(buffer, &specialCharacters, newCap, 'f');
+                pushSpecialCharacter(buffer, 'f');
                 break;
             case '\n':
-                pushSpecialCharacter(buffer, &specialCharacters, newCap, 'n');
+                pushSpecialCharacter(buffer, 'n');
                 break;
             case '\r':
-                pushSpecialCharacter(buffer, &specialCharacters, newCap, 'r');
+                pushSpecialCharacter(buffer, 'r');
                 break;
             case '\t':
-                pushSpecialCharacter(buffer, &specialCharacters, newCap, 't');
+                pushSpecialCharacter(buffer, 't');
                 break;
             default:
-                buffer->data[buffer->length++] = c;
+                ARRAY_PUSH(char, buffer, c);
                 break;
         }
     }
     ARRAY_PUSH(char, buffer, '"');
+
 }
 
 static void serializeNumber(JNumber number, ARRAY_T(char) *buffer) {
+
     double value = number.value;
     double a;
-    ARRAY_ENSURE_CAPACITY(char, buffer, buffer->capacity + 20);
+    ARRAY_ENSURE_CAPACITY(char, buffer, buffer->length + 20);
     if (isfinite(value) && modf(value, &a) == 0.0 &&
         value >= (double) LLONG_MIN && value <= (double) LLONG_MAX) {
         buffer->length += snprintf(buffer->data + buffer->length, buffer->capacity - buffer->length, "%lld", (long long) value);
     } else {
         buffer->length += snprintf(buffer->data + buffer->length, buffer->capacity - buffer->length, "%g", value);
     }
+
 }
 
 static void serializeBoolean(JBool boolean, ARRAY_T(char) *buffer) {
+
     static char trueStr[] = "true";
     static char falseStr[] = "false";
     if (boolean.value) {
@@ -174,63 +178,7 @@ static void serializeBoolean(JBool boolean, ARRAY_T(char) *buffer) {
     } else {
         ARRAY_PUSH_RANGE(char, buffer, falseStr, strlen(falseStr));
     }
-}
 
-static void freeJToken(JToken *token);
-static void freeJString(JString *string);
-static void freeJProperties(JProperty *properties, size_t count);
-static void freeJObject(JObject *object);
-static void freeJTokens(JToken *tokens, size_t count);
-static void freeJList(JList *list);
-
-void freeJson(JToken *token) {
-    freeJToken(token);
-}
-
-static void freeJToken(JToken *token) {
-    switch (token->type) {
-        case JSON_OBJECT: {
-            freeJObject(&token->literal.object);
-            break;
-        }
-        case JSON_LIST: {
-            freeJList(&token->literal.list);
-            break;
-        }
-        case JSON_STRING: {
-            freeJString(&token->literal.string);
-            break;
-        }
-        default:
-            break;
-    }
-}
-
-static void freeJString(JString *string) {
-    deallocate(string->value);
-}
-
-static void freeJTokens(JToken *tokens, size_t count) {
-    for (size_t i = 0; i < count; i++) {
-        freeJToken(&tokens[i]);
-    }
-    deallocate(tokens);
-}
-
-static void freeJList(JList *list) {
-    freeJTokens(list->tokens, list->count);
-}
-
-static void freeJProperties(JProperty *properties, size_t count) {
-    for (size_t i = 0; i < count; i++) {
-        freeJString(&properties[i].key);
-        freeJToken(&properties[i].value);
-    }
-    deallocate(properties);
-}
-
-static void freeJObject(JObject *object) {
-    freeJProperties(object->properties, object->count);
 }
 
 TYPEDEF_RESULT(JObject);
@@ -240,7 +188,7 @@ TYPEDEF_RESULT(JBool);
 TYPEDEF_RESULT(JString);
 
 typedef struct {
-    char *ptr;
+    const char *ptr;
     size_t len;
 } buffer_t;
 
@@ -253,7 +201,6 @@ typedef struct {
 #define SKIP_WHITESPACE(type, action) if (!skipWhitespace(buffer)) {action;}
 #define ASSERT_CHAR(type, c, action) if (CHAR != (c)) {action;} ADD(1)
 #define IF_ERROR(type, result, action) if (!result.ok) {action;}
-#define IF_ERROR_RETURN(type, result) IF_ERROR(type, result, return RESULT_ERROR(type))
 
 static RESULT_T(JToken) deserializeToken(buffer_t *buffer);
 static RESULT_T(JString) deserializeString(buffer_t *buffer);
@@ -273,19 +220,20 @@ RESULT_T(JToken) deserializeJson(const char *buffer, const size_t len) {
 }
 
 static RESULT_T(JToken) deserializeToken(buffer_t *buffer) {
+
     JToken token;
     SKIP_WHITESPACE(JToken, return RESULT_ERROR(JToken));
     switch (CHAR) {
         case '{': {
             RESULT_T(JObject) object = deserializeObject(buffer);
             IF_ERROR_RETURN(JToken, object);
-            token = _JToken(object.var);
+            token = toJToken_JObject(object.var);
             break;
         }
         case '[': {
             RESULT_T(JList) list = deserializeList(buffer);
             IF_ERROR_RETURN(JToken, list);
-            token = _JToken(list.var);
+            token = toJToken_JList(list.var);
             break;
         }
         case '"': {
@@ -302,7 +250,16 @@ static RESULT_T(JToken) deserializeToken(buffer_t *buffer) {
             break;
         }
         case '-':
-        case '0' ... '9': {
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9': {
             RESULT_T(JNumber) number = deserializeNumber(buffer);
             IF_ERROR_RETURN(JToken, number);
             token = toJToken_JNumber(number.var);
@@ -314,18 +271,22 @@ static RESULT_T(JToken) deserializeToken(buffer_t *buffer) {
                 token = _JNull();
                 ADD(strlen(nullString));
             } else {
+
                 return RESULT_ERROR(JToken);
             }
             break;
         }
         default:
+
             return RESULT_ERROR(JToken);
     }
+
     return RESULT_FROM_VAR(JToken, token);
 }
 
 static RESULT_T(JString) deserializeString(buffer_t *buffer) {
-    ASSERT_CHAR(JString, '"', goto _return);
+
+    ASSERT_CHAR(JString, '"', goto _returnError);
     if (CHAR == '"') {
         JString string = _JStringEmpty();
         ADD(1);
@@ -333,7 +294,7 @@ static RESULT_T(JString) deserializeString(buffer_t *buffer) {
     }
     size_t stringLen = 0;
     int backslash = 0;
-    char *string = allocate(LEN);
+    char *string = gcArenaAllocate(LEN, alignof(char));
     for (size_t i = 0; i < LEN; i++) {
         const char c = CHAR_AT(i);
         if (backslash) {
@@ -360,33 +321,33 @@ static RESULT_T(JString) deserializeString(buffer_t *buffer) {
                     string[stringLen++] = '\f';
                     break;
                 default:
-                    goto _freeString;
+                    goto _returnError;
             }
         } else switch (c) {
             case '\\':
                 backslash = 1;
                 break;
             case '"': {
-                string = reallocate(string, stringLen);
+                gcArenaGiveBack(LEN - stringLen);
                 JString jstring = {.value = string, .size = stringLen};
                 ADD(i + 1);
                 return RESULT_FROM_VAR(JString, jstring);
             }
-            case 0 ... ' ' - 1:
-                goto _freeString;
             default:
+                if (c > 0 && c < ' ') {
+                    goto _returnError;
+                }
                 string[stringLen++] = c;
                 break;
         }
     }
-_freeString:
-    deallocate(string);
-_return:
+
+_returnError:
     return RESULT_ERROR(JString);
 }
 
 TYPEDEF_ARRAY(JProperty);
-DEFINE_ARRAY_C(JProperty);
+DEFINE_ARRAY_C(JProperty)
 
 static RESULT_T(JObject) deserializeObject(buffer_t *buffer) {
     ASSERT_CHAR(JObject, '{', goto _returnError);
@@ -399,45 +360,37 @@ static RESULT_T(JObject) deserializeObject(buffer_t *buffer) {
     ARRAY_T(JProperty) properties = ARRAY_NEW(JProperty);
     for (;;) {
         RESULT_T(JString) key = deserializeString(buffer);
-        IF_ERROR(JObject, key, goto _freeProperties);
-        SKIP_WHITESPACE(JObject, goto _freeKey);
-        ASSERT_CHAR(JObject, ':', goto _freeKey);
-        SKIP_WHITESPACE(JObject, goto _freeKey);
+        IF_ERROR(JObject, key, break);
+        SKIP_WHITESPACE(JObject, break);
+        ASSERT_CHAR(JObject, ':', break);
+        SKIP_WHITESPACE(JObject, break);
         RESULT_T(JToken) value = deserializeToken(buffer);
-        IF_ERROR(JObject, value, goto _freeKey);
-        SKIP_WHITESPACE(JObject, goto _freeValue);
+        IF_ERROR(JObject, value, break);
+        SKIP_WHITESPACE(JObject, break);
         JProperty property = {
             .key = key.var,
             .value = value.var,
         };
         ARRAY_PUSH(JProperty, &properties, property);
         if (CHAR == '}') {
+            ARRAY_SHRINK_TO_FIT(JProperty, &properties);
             JObject object = {
                 .properties = properties.data,
                 .count = properties.length,
             };
-            ARRAY_SHRINK_TO_FIT(JProperty, &properties);
             ADD(1);
             return RESULT_FROM_VAR(JObject, object);
         }
-        ASSERT_CHAR(JObject, ',', goto _freeProperties);
-        SKIP_WHITESPACE(JObject, goto _freeProperties);
-        continue;
-    _freeValue:
-        freeJToken(&value.var);
-    _freeKey:
-        freeJString(&key.var);
-        break;
+        ASSERT_CHAR(JObject, ',', goto _returnError);
+        SKIP_WHITESPACE(JObject, goto _returnError);
     }
 
-_freeProperties:
-    freeJProperties(properties.data, properties.length);
 _returnError:
     return RESULT_ERROR(JObject);
 }
 
 TYPEDEF_ARRAY(JToken);
-DEFINE_ARRAY_C(JToken);
+DEFINE_ARRAY_C(JToken)
 
 static RESULT_T(JList) deserializeList(buffer_t *buffer) {
     ASSERT_CHAR(JList, '[', goto _returnError);
@@ -450,27 +403,22 @@ static RESULT_T(JList) deserializeList(buffer_t *buffer) {
     ARRAY_T(JToken) tokens = ARRAY_NEW(JToken);
     for (;;) {
         RESULT_T(JToken) token = deserializeToken(buffer);
-        IF_ERROR(JList, token, goto _freeTokens);
-        SKIP_WHITESPACE(JList, goto _freeToken);
+        IF_ERROR(JList, token, goto _returnError);
+        SKIP_WHITESPACE(JList, goto _returnError);
         ARRAY_PUSH(JToken, &tokens, token.var);
         if (CHAR == ']') {
+            ARRAY_SHRINK_TO_FIT(JToken, &tokens);
             JList list = {
                 .tokens = tokens.data,
                 .count = tokens.length,
             };
-            ARRAY_SHRINK_TO_FIT(JToken, &tokens);
             ADD(1);
             return RESULT_FROM_VAR(JList, list);
         }
-        ASSERT_CHAR(JList, ',', goto _freeTokens);
-        SKIP_WHITESPACE(JList, goto _freeTokens);
-        continue;
-    _freeToken:
-        freeJToken(&token.var);
-        break;
+        ASSERT_CHAR(JList, ',', goto _returnError);
+        SKIP_WHITESPACE(JList, goto _returnError);
     }
-_freeTokens:
-    freeJTokens(tokens.data, tokens.length);
+
 _returnError:
     return RESULT_ERROR(JList);
 }
@@ -494,6 +442,7 @@ static RESULT_T(JNumber) deserializeNumber(buffer_t *buffer) {
 }
 
 static RESULT_T(JBool) deserializeBoolean(buffer_t *buffer) {
+
     static const char trueString[] = "true";
     static const char falseString[] = "false";
     JBool boolean;
@@ -557,15 +506,15 @@ static int equalsToken(JToken *token1, JToken *token2) {
     JValue *value1 = &token1->literal, *value2 = &token2->literal;
     switch (token1->type) {
         case JSON_OBJECT:
-            return equalsObject(value1, value2);
+            return equalsObject((JObject*) value1, (JObject*) value2);
         case JSON_LIST:
-            return equalsList(value1, value2);
+            return equalsList((JList*) value1, (JList*) value2);
         case JSON_NUMBER:
-            return equalsNumber(value1, value2);
+            return equalsNumber((JNumber*) value1, (JNumber*) value2);
         case JSON_STRING:
-            return equalsString(value1, value2);
+            return equalsString((JString*) value1, (JString*) value2);
         case JSON_BOOLEAN:
-            return equalsBoolean(value1, value2);
+            return equalsBoolean((JBool*) value1, (JBool*) value2);
         case JSON_NULL:
             return 1;
         default:
@@ -611,16 +560,6 @@ JToken *getValueJObject(JObject *object, JString *key) {
         }
     }
     return NULL;
-}
-
-void addProperty(JObject *object, const char *key, JToken *token) {
-    size_t keyLen = strlen(key);
-    char *copiedKey = malloc(keyLen + 1);
-    memcpy(copiedKey, key, keyLen);
-    JString keyString = {.size = keyLen, .value = copiedKey};
-    JProperty property = {.key = keyString, .value = *token};
-    object->properties = reallocate(object->properties, sizeof(JProperty) * (object->count + 1));
-    object->properties[object->count++] = property;
 }
 
 JToken toJToken_JObject(JObject object) {
@@ -696,7 +635,7 @@ JToken toJToken_string(ARRAY_T(char) string) {
     };
 }
 
-JToken toJToken_cstring(char *cstring) {
+JToken toJToken_cstring(const char *cstring) {
     return (JToken) {
         .literal = (JValue) {.string = (JString){
             .value = cstring,
@@ -740,7 +679,7 @@ JObject toJObject_JProperties(const unsigned int count, ...) {
     va_list args;
     va_start(args, count);
     JObject object = {
-        .properties = allocate(sizeof(JProperty) * count),
+        .properties = gcArenaAllocate(sizeof(JProperty) * count, alignof(JProperty)),
         .count = count,
     };
     for (unsigned int i = 0; i < count; i++) {
@@ -754,7 +693,7 @@ JList toJList_JTokens(const unsigned int count, ...) {
     va_list args;
     va_start(args, count);
     JList list = {
-        .tokens = allocate(sizeof(JToken) * count),
+        .tokens = gcArenaAllocate(sizeof(JToken) * count, alignof(JToken)),
         .count = count,
     };
     for (unsigned int i = 0; i < count; i++) {

@@ -33,94 +33,89 @@ HttpReq newRequest()
 /* Parse HTTP request, returns the amount of bytes needed additionally read from the TCP socket based on the Content-Length header */
 int parseRequestStream(HttpReq *req, TcpStream *stream)
 {
-    SessionState *state = req->appState;
-    int returnValue = 0;
     /* Parse method */
     {
+        debug("Parsing Method");
         string method = tcpStreamReadUntilSpace(stream, 7);
         if (method.length < 0)
         {
-            returnValue = method.length;
-            if (method.length != TCP_STREAM_CLOSED) {
-                error("Error Parsing Method: %s", errToStr(returnValue));
+            if (method.length != TCP_STREAM_CLOSED && method.length != TCP_STREAM_TIMEOUT) {
+                error("Error Parsing Method: %s", errToStr(method.length));
             }
-            goto _ErrorReturn;
+            return method.length;
         }
         req->method = strnToMethod(method.ptr, method.length);
 
         if (req->method == METHOD_UNKNOWN)
         {
-            returnValue = UNKNOWN_METHOD;
             error("Error parsing Method UNKNOWN");
-            goto _ErrorReturn;
+            return UNKNOWN_METHOD;
         }
     }
 
     /* Parse path */
     {
+        debug("Parsing Path");
         string path = tcpStreamReadUntilSpace(stream, 1024);
         if (path.length < 0)
         {
-            returnValue = path.length;
-            if (path.length != TCP_STREAM_CLOSED) {
-                error("Error Parsing Path: %s", errToStr(returnValue));
+            if (path.length != TCP_STREAM_CLOSED && path.length != TCP_STREAM_TIMEOUT) {
+                error("Error Parsing Path: %s", errToStr(path.length));
             }
-            goto _ErrorReturn;
+            return path.length;
         }
         if (parsePath(&req->path, path.ptr, path.length) == -1)
         {
-            returnValue = BAD_REQUEST_ERROR;
-            goto _ErrorReturn;
+            return BAD_REQUEST_ERROR;
         }
     }
 
     /* Parse version */
     {
+        debug("Parsing Version");
         string version = tcpStreamReadUntilCRLF(stream, 8, 0);
         if (version.length < 0 && version.length != ENTITY_TOO_LARGE_ERROR)
         {
-            returnValue = version.length;
-            if (version.length != TCP_STREAM_CLOSED) {
-                error("Error Parsing Version: %s\n", errToStr(returnValue));
+            if (version.length != TCP_STREAM_CLOSED && version.length != TCP_STREAM_TIMEOUT) {
+                error("Error Parsing Version: %s\n", errToStr(version.length));
             }
-            goto _ErrorReturn;
+            return version.length;
         }
         if (!isVersionValid(version.ptr, version.length) || version.length == ENTITY_TOO_LARGE_ERROR)
         {
-            returnValue = UNKNOWN_VERSION;
             error("Error Parsing Version TOO LARGE\n");
-            goto _ErrorReturn;
+            return UNKNOWN_VERSION;
         }
-        req->version = allocate(version.length + 1);
+        req->version = gcArenaAllocate(version.length + 1, alignof(char));
         strncpy(req->version, version.ptr, version.length);
     }
 
     /* Parse headers */
     {
+        debug("Parsing Headers");
         int result = parseHeadersStream(&req->headers, stream);
         if (result < 0)
         {
-            returnValue = result;
-            if (result != TCP_STREAM_CLOSED) {
+            if (result != TCP_STREAM_CLOSED && result != TCP_STREAM_TIMEOUT) {
                 error("Error Parsing Headers %s\n", errToStr(result));
             }
-            goto _ErrorReturn;
+            return result;
         }
     }
 
     /* Fetch content */
     {
+        debug("Parsing Content");
         req->contentLength = findContentLength(req->headers);
         if (req->contentLength > 0)
         {
             req->content = tcpStreamReadSlice(stream, req->contentLength);
             if (stream->error < 0)
             {
-                returnValue = stream->error;
-                if (stream->error != TCP_STREAM_CLOSED) {
+                if (stream->error != TCP_STREAM_CLOSED && stream->error != TCP_STREAM_TIMEOUT) {
                     error("Error Fetching Content: %s\n", errToStr(stream->error));
                 }
-                goto _ErrorReturn;
+                return stream->error;
             }
         }
         else
@@ -133,12 +128,6 @@ int parseRequestStream(HttpReq *req, TcpStream *stream)
     req->rawLength = stream->cursor;
 
     return 0;
-_ErrorReturn:
-    req->content = NULL;
-    freeHeaders(&req->headers);
-    deallocate(req->version);
-    freePath(&req->path);
-    return returnValue;
 }
 
 int findContentLength(HttpHeaders headers)
@@ -215,30 +204,32 @@ HttpMethod strnToMethod(const char *str, int n)
 
 int parsePath(HttpPath *path, const char *str, int n)
 {
-    int offset, prevOffset = 0, pathCap = 1;
+    int offset, prevOffset = 0;
     path->elCount = 0;
     path->elements = NULL;
-    path->raw = allocate(n + 1);
-    snprintf(path->raw, n + 1, "%s", str);
+    path->raw = gcArenaAllocate(n + 1, alignof(char));
+    snprintf(path->raw, n + 1, "%.*s", n, str);
     path->raw[n] = '\0';
     char *element;
-    if (str[prevOffset++] != '/')
+    int slashes = 0;
+    for (int i = 0; i < n; i++) {
+        slashes += str[i] == '/';
+    }
+    if (str[prevOffset++] != '/') {
         return -1;
+    }
+    if (n == 1) {
+        path->elements = NULL;
+        return 0;
+    }
 
-    path->elements = allocate(sizeof(char *));
+    path->elements = gcArenaAllocate(sizeof(char *) * slashes, alignof(char *));
 
     while ((offset = strnindex(str + prevOffset, n - prevOffset, "/")) != -1)
     {
-        element = allocate(offset + 1);
-
-        if (path->elCount >= pathCap)
-        {
-            pathCap *= 2;
-            path->elements = reallocate(path->elements, sizeof(char *) * pathCap);
-        }
-
+        element = gcArenaAllocate(offset + 1, alignof(char));
         path->elements[path->elCount++] = element;
-        snprintf(element, offset + 1, "%s", str + prevOffset);
+        snprintf(element, offset + 1, "%.*s", offset, str + prevOffset);
 
         prevOffset += offset + 1;
     }
@@ -247,41 +238,12 @@ int parsePath(HttpPath *path, const char *str, int n)
 
     if (elCap > 1)
     {
-        element = allocate(elCap);
-        if (path->elCount == pathCap)
-        {
-            pathCap++;
-            path->elements = reallocate(path->elements, sizeof(char *) * pathCap);
-        }
+        element = gcArenaAllocate(elCap, alignof(char));
         path->elements[path->elCount++] = element;
-        snprintf(element, elCap, "%s", str + prevOffset);
-    }
-
-    if (path->elCount == 0)
-    {
-        deallocate(path->elements);
-        path->elements = NULL;
-    }
-    else if (path->elCount < pathCap)
-    {
-        path->elements = reallocate(path->elements, sizeof(char *) * path->elCount);
+        snprintf(element, elCap, "%.*s", elCap - 1, str + prevOffset);
     }
 
     return 0;
-}
-
-void freePath(HttpPath *path)
-{
-    if (path->elements == NULL) {
-        return;
-    }
-    for (int i = 0; i < path->elCount; i++)
-    {
-        deallocate(path->elements[i]);
-    }
-    deallocate(path->elements);
-    deallocate(path->raw);
-    path->elements = NULL;
 }
 
 int pathEq(HttpPath obj1, HttpPath obj2)
@@ -374,15 +336,6 @@ int reqEq(HttpReq obj1, HttpReq obj2)
     return 1;
 }
 
-void freeReq(HttpReq *req)
-{
-    freePath(&req->path);
-    freeHeaders(&req->headers);
-    deallocate(req->version);
-    req->version = NULL;
-    req->content = NULL;
-}
-
 int isConnectionKeepAlive(HttpReq *req)
 {
     HttpHeader *header = findHeader(req->headers, "Connection");
@@ -407,34 +360,28 @@ JObject httpReqToJObject(HttpReq *req) {
     char *path = malloc(1024);
     strncpy(path, req->path.raw, 1024);
     JObject headersObj = {
-        .properties = allocate(sizeof(JProperty) * req->headers.count),
+        .properties = gcArenaAllocate(sizeof(JProperty) * req->headers.count, alignof(JProperty)),
         .count = req->headers.count
     };
     HttpHeader *headers = req->headers.arr;
     for (int i = 0; i < req->headers.count; i++) {
-        headersObj.properties[i] = _JProperty(headers[i].key, headers[i].value);
+        headersObj.properties[i] = _JProperty(headers[i].key, toJToken_cstring(headers[i].value));
     }
 
     JToken contentToken;
     if (req->content == NULL) {
         contentToken = _JNull();
     } else {
-        contentToken = _JToken((char *) req->content);
+        contentToken = toJToken_cstring(req->content);
     }
 
     JObject reqObject = _JObject(
-        _JProperty(methodKey, methodToStr(req->method)),
-        _JProperty(pathKey, path),
-        _JProperty(versionKey, req->version),
-        _JProperty(headersKey, headersObj),
+        _JProperty(methodKey, toJToken_cstring(methodToStr(req->method))),
+        _JProperty(pathKey, toJToken_cstring(path)),
+        _JProperty(versionKey, toJToken_cstring(req->version)),
+        _JProperty(headersKey, toJToken_JObject(headersObj)),
         _JProperty(contentKey, contentToken)
     );
 
     return reqObject;
-}
-
-void freeHttpReqJObject(JObject *req) {
-    deallocate(req->properties[1].value.literal.string.value); //free path
-    deallocate(req->properties[3].value.literal.object.properties);
-    deallocate(req->properties);
 }

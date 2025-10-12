@@ -8,71 +8,18 @@
 #include "alloc.h"
 #include "utils.h"
 
-int parseHeaders(HttpHeaders *headers, const char *str, int size)
-{
-    int offset, prevOffset = 0, headerCap = 1;
-    headers->arr = allocate(sizeof(HttpHeader));
-    headers->count = 0;
-
-    while (strncmp(str + prevOffset, "\r\n", 2) != 0)
-    {
-        if (headers->count >= headerCap)
-        {
-            headerCap *= 2;
-            headers->arr = reallocate(headers->arr, headerCap * sizeof(HttpHeader));
-        }
-        offset = strnindex(str + prevOffset, size - prevOffset, ": ");
-        if (offset == -1 ||
-            strnindex(str + prevOffset, offset, "\r") != -1 ||
-            strnindex(str + prevOffset, offset, "\n") != -1)
-        {
-            freeHeaders(headers);
-            return -1;
-        }
-        char *key = allocate(offset + 1);
-        headers->arr[headers->count].key = key;
-        snprintf(key, offset + 1, "%s", str + prevOffset);
-        prevOffset += offset + 2;
-        if (str[prevOffset] == ' ')
-        {
-            freeHeaders(headers);
-            deallocate(key);
-            return -1;
-        }
-
-        offset = strnindex(str + prevOffset, size - prevOffset, "\r\n");
-        if (offset == -1 ||
-            strnindex(str + prevOffset, offset, "\r") != -1 ||
-            strnindex(str + prevOffset, offset, "\n") != -1)
-        {
-            deallocate(key);
-            freeHeaders(headers);
-            return -1;
-        }
-        char *value = allocate(offset + 1);
-        headers->arr[headers->count].value = value;
-        snprintf(value, offset + 1, "%s", str + prevOffset);
-        prevOffset += offset + 2;
-
-        headers->count++;
-    }
-
-    return prevOffset + 2;
-}
-
-#define INITIAL_HEADER_CAP 4
+#define INITIAL_HEADER_CAP 8
 #define MAX_HEADER_SIZE 8192
 
 int parseHeadersStream(HttpHeaders *headers, TcpStream *stream)
 {
     int headerCap = INITIAL_HEADER_CAP;
-    headers->arr = allocate(sizeof(HttpHeader) * headerCap);
+    headers->arr = gcAllocate(sizeof(HttpHeader) * headerCap);
     for (;;)
     {
         tcpStreamFill(stream, stream->cursor + 2);
         if (stream->error != 0)
         {
-            freeHeaders(headers);
             return stream->error;
         }
         if(strncmp(stream->buffer + stream->cursor, "\r\n", 2) == 0) {
@@ -81,43 +28,26 @@ int parseHeadersStream(HttpHeaders *headers, TcpStream *stream)
         string headerKey = tcpStreamReadUntilString(stream, MAX_HEADER_SIZE, ": ", 2);
         if (headerKey.length < 0)
         {
-            freeHeaders(headers);
             return headerKey.length;
         }
         string headerValue = tcpStreamReadUntilCRLF(stream, MAX_HEADER_SIZE, 0);
         if (headerKey.length < 0)
         {
-            freeHeaders(headers);
             return headerValue.length;
         }
         if (headers->count >= headerCap)
         {
             headerCap *= 2;
-            headers->arr = reallocate(headers->arr, headerCap * sizeof(HttpHeader));
+            headers->arr = gcReallocate(headers->arr, headerCap * sizeof(HttpHeader));
         }
-        headers->arr[headers->count].key = allocate(headerKey.length + 1);
-        headers->arr[headers->count].value = allocate(headerValue.length + 1);
-        snprintf(headers->arr[headers->count].key, headerKey.length + 1, "%s", headerKey.ptr);
-        snprintf(headers->arr[headers->count].value, headerValue.length + 1, "%s", headerValue.ptr);
+        headers->arr[headers->count].key = gcArenaAllocate(headerKey.length + 1, alignof(char));
+        headers->arr[headers->count].value = gcArenaAllocate(headerValue.length + 1, alignof(char));
+        snprintf(headers->arr[headers->count].key, headerKey.length + 1, "%.*s", (int) headerKey.length, headerKey.ptr);
+        snprintf(headers->arr[headers->count].value, headerValue.length + 1, "%.*s", (int) headerValue.length, headerValue.ptr);
         headers->count++;
     }
     stream->cursor += 2;
     return 0;
-}
-
-void freeHeaders(HttpHeaders *headers)
-{
-    if (headers->arr == NULL) {
-        return;
-    }
-    for (int i = 0; i < headers->count; i++)
-    {
-        deallocate(headers->arr[i].key);
-        deallocate(headers->arr[i].value);
-    }
-    deallocate(headers->arr);
-    headers->arr = NULL;
-    headers->count = 0;
 }
 
 int headerEq(HttpHeader obj1, HttpHeader obj2)

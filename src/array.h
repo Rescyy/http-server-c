@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #include "alloc.h"
 
 // Macro to define array type
@@ -31,10 +32,10 @@ void type##_array_push_range(ARRAY_T(type) *arr, type *range, int rangeLength);\
 void type##_array_push_multiple(ARRAY_T(type) *arr, type element, int amount);\
 void type##_array_shrink_to_fit(ARRAY_T(type) *arr);
 
-#define DEFINE_ARRAY_FUNCS(type) \
+#define DEFINE_ARRAY_FUNCS(type, _alloc, _realloc) \
 ARRAY_T(type) type##_array_with_capacity(unsigned int capacity) { \
     ARRAY_T(type) arr; \
-    arr.data = (type *)allocate(capacity * sizeof(type)); \
+    arr.data = (type *)_alloc(capacity * sizeof(type)); \
     arr.length = 0; \
     arr.capacity = capacity; \
     return arr; \
@@ -45,18 +46,17 @@ ARRAY_T(type) type##_array_new(void) { \
 } \
 \
 void type##_array_ensure_capacity(ARRAY_T(type) *arr, unsigned int new_cap) { \
-    if (new_cap > arr->capacity) { \
-        arr->capacity = (arr->capacity * 2 > new_cap) ? arr->capacity * 2 : new_cap; \
-        arr->data = (type *)reallocate(arr->data, arr->capacity * sizeof(type)); \
+    if (new_cap <= arr->capacity) {return;}\
+    while (new_cap > arr->capacity) { \
+        arr->capacity *= 2; \
     } \
+    arr->data = (type *)_realloc(arr->data, arr->capacity * sizeof(type)); \
 } \
 \
 void type##_array_push(ARRAY_T(type) *arr, type value) { \
-    if (arr->length >= arr->capacity) { \
-        type##_array_ensure_capacity(arr, arr->length + 1); \
-    } \
+    type##_array_ensure_capacity(arr, arr->length + 1); \
     arr->data[arr->length++] = value; \
-} \
+}\
 \
 type type##_array_pop(ARRAY_T(type) *arr) { \
     if (arr->length == 0) { \
@@ -92,8 +92,17 @@ void type##_array_push_multiple(ARRAY_T(type) *arr, type value, int amount) {\
 \
 void type##_array_shrink_to_fit(ARRAY_T(type) *arr) {\
     if (arr->length == 0 || arr->length == arr->capacity) return;\
-    reallocate(arr->data, arr->length * sizeof(type));\
+    arr->data = _realloc(arr->data, arr->length * sizeof(type));\
     arr->capacity = arr->length;\
+}\
+\
+void type##_array_resize(ARRAY_T(type) *arr, unsigned int length, unsigned int capacity) {\
+    assert(capacity >= length);\
+    if (arr->capacity != capacity) {\
+        arr->data = _realloc(arr->data, sizeof(type) * capacity);\
+    }\
+    arr->length = length;\
+    arr->capacity = capacity;\
 }
 
 #define DEFINE_ARRAY_H(type) \
@@ -101,7 +110,13 @@ TYPEDEF_ARRAY(type); \
 DECLARE_ARRAY_FUNCS(type)
 
 #define DEFINE_ARRAY_C(type) \
-DEFINE_ARRAY_FUNCS(type)
+DEFINE_ARRAY_FUNCS(type, gcAllocate, gcReallocate)
+
+#define FULL_DEFINE_ARRAY(type) \
+TYPEDEF_ARRAY(type);\
+DEFINE_ARRAY_FUNCS(type, gcAllocate, gcReallocate)
+
+#define SIZEOF_ARRAY 16UL
 
 // Helper macros to call functions more nicely
 #define ARRAY_NEW(type) type##_array_new()
@@ -113,5 +128,6 @@ DEFINE_ARRAY_FUNCS(type)
 #define ARRAY_PUSH_RANGE(type, arr, range, rangeLength) type##_array_push_range(arr, range, rangeLength)
 #define ARRAY_PUSH_MULTIPLE(type, arr, value, amount) type##_array_push_multiple(arr, value, amount)
 #define ARRAY_SHRINK_TO_FIT(type, arr) type##_array_shrink_to_fit(arr)
+#define ARRAY_RESIZE(type, arr, length, capacity) type##_array_resize(arr, length, capacity)
 
 #endif //ARRAY_H

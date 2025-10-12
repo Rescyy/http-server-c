@@ -238,35 +238,9 @@ HttpResp newResp(HttpStatus status)
 }
 
 /* returns size of string */
-int respToStr(HttpResp resp, char *str, int size)
+size_t buildRespStringFirstLineStr(HttpResp *resp, char *str, size_t size)
 {
-    if (resp.status == STATUS_UNKNOWN)
-    {
-        return -1;
-    }
-    int bytes = 0;
-    bytes += buildRespStringFirstLineStr(&resp, str + bytes, size - bytes);
-    for (int i = 0; i < resp.headers.count; i++)
-    {
-        bytes += snprintf(str + bytes, size - bytes, "%s: %s\r\n", resp.headers.arr[i].key, resp.headers.arr[i].value);
-    }
-    bytes += snprintf(str + bytes, size - bytes, "\r\n");
-
-    if (size - bytes < resp.contentLength)
-    {
-        memcpy(str + bytes, resp.content, size - bytes);
-    }
-    else
-    {
-        memcpy(str + bytes, resp.content, resp.contentLength);
-    }
-    return bytes + resp.contentLength;
-}
-
-/* returns size of string */
-int buildRespStringFirstLineStr(HttpResp *resp, char *str, int size)
-{
-    char *version = resp->version;
+    const char *version = resp->version;
     if (version == NULL)
     {
         version = "HTTP/1.1";
@@ -275,9 +249,9 @@ int buildRespStringFirstLineStr(HttpResp *resp, char *str, int size)
 }
 
 /* returns size of string */
-int buildRespStringUntilContent(HttpResp *resp, char *str, int size)
+size_t buildRespStringUntilContent(HttpResp *resp, char *str, size_t size)
 {
-    int bytes = 0;
+    size_t bytes = 0;
     bytes += buildRespStringFirstLineStr(resp, str, size);
     for (int i = 0; i < resp->headers.count; i++)
     {
@@ -287,10 +261,15 @@ int buildRespStringUntilContent(HttpResp *resp, char *str, int size)
     return bytes;
 }
 
-void respBuilderSetVersion(HttpRespBuilder *builder, const char *version)
+void respBuilderSetVersion(HttpRespBuilder *builder, const char *version, int shouldCopy)
 {
-    builder->resp.version = allocate(strlen(version) + 1);
-    strcpy(builder->resp.version, version);
+    if (shouldCopy) {
+        char *copiedVersion = gcArenaAllocate(strlen(version) + 1, alignof(char));
+        strcpy(copiedVersion, version);
+        builder->resp.version = copiedVersion;
+    } else {
+        builder->resp.version = version;
+    }
 }
 
 void respBuilderSetStatus(HttpRespBuilder *builder, HttpStatus status)
@@ -351,43 +330,6 @@ void verifyHeader(HttpHeader header)
 #undef CANT_HAVE_HEADER
 }
 
-void addHeaderImposing(HttpRespBuilder *builder, char *key, char *value)
-{
-    HttpHeaders *headers = &builder->resp.headers;
-
-    char *keyCopy = allocate(strlen(key) + 1);
-    strcpy(keyCopy, key);
-    char *valueCopy = allocate(strlen(value) + 1);
-    strcpy(valueCopy, value);
-
-    for (int i = 0; i < headers->count; i++)
-    {
-        if (strcasecmp(headers->arr[i].key, key) == 0)
-        {
-            deallocate(headers->arr[i].key);
-            deallocate(headers->arr[i].value);
-            headers->arr[i].key = keyCopy;
-            headers->arr[i].value = valueCopy;
-            return;
-        }
-    }
-
-    int *capacity = &builder->headersCapacity;
-    HttpHeader header = {keyCopy, valueCopy};
-    if (headers->count == 0)
-    {
-        *capacity = 1;
-        headers->arr = allocate(sizeof(HttpHeader) * (*capacity));
-    }
-    else if (headers->count >= *capacity)
-    {
-        *capacity *= 2;
-        headers->arr = reallocate(headers->arr, sizeof(HttpHeader) * (*capacity));
-    }
-
-    headers->arr[headers->count++] = header;
-}
-
 void addHeader(HttpRespBuilder *builder, const char *key, const char *value)
 {
     HttpHeaders *headers = &builder->resp.headers;
@@ -404,17 +346,17 @@ void addHeader(HttpRespBuilder *builder, const char *key, const char *value)
     if (headers->count == 0)
     {
         *capacity = 1;
-        headers->arr = allocate(sizeof(HttpHeader) * (*capacity));
+        headers->arr = gcAllocate(sizeof(HttpHeader) * (*capacity));
     }
     else if (headers->count >= *capacity)
     {
         *capacity *= 2;
-        headers->arr = reallocate(headers->arr, sizeof(HttpHeader) * (*capacity));
+        headers->arr = gcReallocate(headers->arr, sizeof(HttpHeader) * (*capacity));
     }
 
-    char *keyCopy = allocate(strlen(key) + 1);
+    char *keyCopy = gcArenaAllocate(strlen(key) + 1, alignof(char));
     strcpy(keyCopy, key);
-    char *valueCopy = allocate(strlen(value) + 1);
+    char *valueCopy = gcArenaAllocate(strlen(value) + 1, alignof(char));
     strcpy(valueCopy, value);
     HttpHeader header = {keyCopy, valueCopy};
 
@@ -425,9 +367,9 @@ void respBuilderAddHeader(HttpRespBuilder *builder, char *key, char *value)
 {
     verifyHeader((HttpHeader){key, value});
 
-    char *keyCopy = allocate(strlen(key) + 1);
+    char *keyCopy = gcArenaAllocate(strlen(key) + 1, alignof(char));
     strcpy(keyCopy, key);
-    char *valueCopy = allocate(strlen(value) + 1);
+    char *valueCopy = gcArenaAllocate(strlen(value) + 1, alignof(char));
     strcpy(valueCopy, value);
     HttpHeader header = {keyCopy, valueCopy};
     HttpHeaders *headers = &builder->resp.headers;
@@ -435,28 +377,32 @@ void respBuilderAddHeader(HttpRespBuilder *builder, char *key, char *value)
     if (headers->count == 0)
     {
         *capacity = 1;
-        headers->arr = allocate(sizeof(HttpHeader) * (*capacity));
+        headers->arr = gcAllocate(sizeof(HttpHeader) * (*capacity));
     }
     else if (headers->count >= *capacity)
     {
         *capacity *= 2;
-        headers->arr = reallocate(headers->arr, sizeof(HttpHeader) * (*capacity));
+        headers->arr = gcReallocate(headers->arr, sizeof(HttpHeader) * (*capacity));
     }
 
     headers->arr[headers->count++] = header;
 }
 
-void respBuilderSetContent(HttpRespBuilder *builder, void *content, size_t contentLength)
+void respBuilderSetContent(HttpRespBuilder *builder, const void *content, size_t contentLength, int shouldCopy)
 {
     assert(builder->resp.content == NULL && "The builder already has some content set");
 
-    builder->resp.content = allocate(contentLength);
-    memcpy(builder->resp.content, content, contentLength);
+    if (shouldCopy) {
+        builder->resp.content = gcArenaAllocate(contentLength, alignof(char));
+        memcpy(builder->resp.content, content, contentLength);
+    } else {
+        builder->resp.content = content;
+    }
     builder->resp.contentLength = contentLength;
 }
 
 /* Read only files please */
-void respBuilderSetFileContent(HttpRespBuilder *builder, const char *filePath)
+void respBuilderSetFileContent(HttpRespBuilder *builder, const char *filePath, int shouldCopy)
 {
     assert(builder->resp.content == NULL && "The builder already has some content set");
     struct stat st;
@@ -470,16 +416,19 @@ void respBuilderSetFileContent(HttpRespBuilder *builder, const char *filePath)
         {
             respBuilderSetStatus(builder, INTERNAL_SERVER_ERROR);
         }
-        freeHeaders(&builder->resp.headers);
     }
     else
     {
         size_t size = st.st_size;
-        size_t pathSize = strlen(filePath);
-        char *content = allocate(pathSize + 1);
-        snprintf(content, pathSize + 1, "%s", filePath);
+        if (shouldCopy) {
+            size_t pathSize = strlen(filePath);
+            char *content = gcArenaAllocate(pathSize + 1, 1);
+            snprintf(content, pathSize + 1, "%.*s", (int) pathSize, filePath);
+            builder->resp.content = content;
+        } else {
+            builder->resp.content = filePath;
+        }
         builder->resp.isContentFile = 1;
-        builder->resp.content = content;
         builder->resp.contentLength = size;
     }
 }
@@ -550,8 +499,7 @@ HttpResp respBuild(HttpRespBuilder *builder)
 }
 
 static unsigned int defaultRespBuilderFlags = USE_DEFAULT_SERVER_HEADER_FLAG;
-HttpRespBuilder newRespBuilder()
-{
+HttpRespBuilder newRespBuilder() {
     HttpRespBuilder builder = {
         .resp = {
             .version = NULL,
@@ -594,11 +542,4 @@ int respEq(HttpResp obj1, HttpResp obj2)
         return 0;
     }
     return 1;
-}
-
-void freeResp(HttpResp *resp)
-{
-    deallocate(resp->version);
-    freeHeaders(&resp->headers);
-    deallocate(resp->content);
 }

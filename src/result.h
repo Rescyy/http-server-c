@@ -16,5 +16,4 @@ typedef struct {\
 #define RESULT_FROM_VAR(type, _var) ((RESULT_T(type)) {.var = _var, .ok = 1})
 #define IF_ERROR_RETURN(to_t, result) if (!result.ok) return RESULT_ERROR(to_t)
 
-
 #endif //RESULT_TYPE_H

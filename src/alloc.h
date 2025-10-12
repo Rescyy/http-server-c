@@ -6,29 +6,24 @@
 #define ALLOC_H
 
 #include <stdio.h>
+#include "array.h"
 
 #define ALLOC_FILE "allocations.txt"
 #define LEAK_FILE "leaks.txt"
 
-// Public control for tracking lifecycle
-void init_alloc(void);
-void start_alloc_tracking(void);
-void stop_alloc_tracking(void);
-void *_allocate(size_t size);
-void *_reallocate(void *ptr, size_t size);
-void _deallocate(void *ptr);
-void *_allocateTrack(size_t size, const char *file, int line);
-void _deallocateTrack(void *ptr, const char *file, int line);
-void *_reallocateTrack(void* ptr, size_t size, const char *file, int line);
+typedef void (*destructor_t) (void*);
 
-#ifdef TRACK_LEAK
-#define allocate(size)       _allocateTrack((size), __FILE__, __LINE__)
-#define deallocate(ptr)      _deallocateTrack((ptr), __FILE__, __LINE__)
-#define reallocate(ptr, sz)  _reallocateTrack((ptr), (sz), __FILE__, __LINE__)
-#else
-#define allocate(size)       _allocate((size))
-#define deallocate(ptr)      _deallocate((ptr))
-#define reallocate(ptr, sz)  _reallocate((ptr), (sz))
-#endif
+// #ifdef MEMORY_COLLECTION
+void *allocate(size_t size);
+void *reallocate(void *ptr, size_t size);
+void deallocate(void *ptr);
+void gcInit(); // initialises the thread key
+void gcTrack(); // initialises thread specific tracking data
+void gcCleanup(); // cleans up the thread data and re-initialises it
+void *gcArenaAllocate(size_t size, int align); // allocates bytes from the arena, aligned to 8 bytes
+void gcArenaGiveBack(size_t size); // takes back some of the given data from the most recent used chunk
+void *gcAllocate(size_t size); // allocates bytes and adds an allocation entry
+void *gcReallocate(void *ptr, size_t size); // reallocates bytes and adds an reallocation entry
+void attachDestructor(destructor_t func, void *ptr);
 
 #endif // ALLOC_H

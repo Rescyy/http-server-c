@@ -14,7 +14,7 @@
 #define COLOR_RESET "\e[m\033[0m"
 #define COLOR_COUNT sizeof(colorCodes) / sizeof(*colorCodes)
 #define CONNECTION_NAME_FORMAT "Request %lu.%lu"
-#define THREAD_NAME_FORMAT "%sThread %ld" COLOR_RESET
+#define THREAD_NAME_FORMAT "%sThread %lu" COLOR_RESET
 #define THREAD_NAME_ARGS(threadId) colorCodes[hash((void *)threadId, sizeof(long)) % COLOR_COUNT], threadId
 
 static char *colorCodes[] = {
@@ -49,18 +49,20 @@ static const char *logLevelToStr(LogLevel logLevel) {
             return "ERROR";
         case FATAL:
             return "FATAL";
+        default:
+            return "UNKNOWN LOG LEVEL";
     }
 }
 
 static void _log(LogLevel logLevel, const char *format, va_list args) {
-    char *time = getCurrentFormattedTime();
-    SessionState *state = getCurrentThreadSessionState();
+    fflush(stdout);
+    DECLARE_CURRENT_TIME(time);
+    SessionState *state = getSessionState();
     if (state == NULL) {
-        printf("[%s|%s|MAIN]", logLevelToStr(logLevel), time);
+        printf("[%s|%s|MAIN] ", logLevelToStr(logLevel), time);
     } else {
         printf("[%s|%s|%lu.%lu] ", logLevelToStr(logLevel), time, state->connectionIndex, state->requestIndex);
     }
-    deallocate(time);
     vprintf(format, args);
     putchar('\n');
     fflush(stdout);
@@ -138,15 +140,22 @@ void setLogFlags(int flags)
 
 void logResponse(HttpResp *resp, HttpReq *req)
 {
-    char path[1024];
-    strncpy(path, req->path.raw, 1024);
-    long threadId = (long)pthread_self();
+    unsigned long threadId = pthread_self();
     char *clientIp = req->appState->clientSocket.ip;
     unsigned long connectionIndex = req->appState->connectionIndex;
     unsigned long requestIndex = req->appState->requestIndex;
     if (logFlags & PRINT_LOG)
     {
-        printf(CONNECTION_NAME_FORMAT " " THREAD_NAME_FORMAT " %-16s %-7s %-50s | %d %s\n", connectionIndex, requestIndex, THREAD_NAME_ARGS(threadId), clientIp, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
+        printf(CONNECTION_NAME_FORMAT " " THREAD_NAME_FORMAT " %-16s %-7s %-50s | %d %s\n",
+            connectionIndex,
+            requestIndex,
+            THREAD_NAME_ARGS(threadId),
+            clientIp,
+            methodToStr(req->method),
+            req->path.raw,
+            resp->status,
+            statusToStr(resp->status)
+        );
     }
     if (logFlags & JSON_LOG && jsonLogFilePath != NULL) {
         FILE *file = fopen(jsonLogFilePath, "a");
@@ -155,34 +164,43 @@ void logResponse(HttpResp *resp, HttpReq *req)
         }
         char *buffer;
 
+        DECLARE_CURRENT_TIME(currentTime);
+
         JObject reqObj = httpReqToJObject(req);
+        JToken reqToken = toJToken_JObject(reqObj);
+        JToken timestampToken = toJToken_long(time(NULL));
+        JToken formattedTimeToken = toJToken_cstring(time);
+        JToken clientIpToken = toJToken_cstring(clientIp);
 
-        time_t t = time(NULL);
-        JToken timestampToken = _JToken((long) t);
-        addProperty(&reqObj, "timestamp", &timestampToken);
+        JObject logObj = _JObject(
+            _JProperty("request", reqToken),
+            _JProperty("timestamp", timestampToken),
+            _JProperty("formattedTime", formattedTimeToken),
+            _JProperty("clientIp", clientIpToken)
+        );
+        JToken logToken = toJToken_JObject(logObj);
 
-        char *formattedTime = getCurrentFormattedTime();
-        JToken formattedTimeToken = _JToken(formattedTime);
-        addProperty(&reqObj, "formattedTime", &formattedTimeToken);
-
-        JToken clientIpToken = _JToken(clientIp);
-        addProperty(&reqObj, "clientIp", &clientIpToken);
-
-        JToken reqToken = _JToken(reqObj);
-        unsigned int size = serializeJson(reqToken, &buffer, 4);
+        unsigned int size = serializeJson(logToken, &buffer, 4);
         fwrite(buffer, size, 1, file);
         char entrySeparator[] = ",\n";
         fwrite(entrySeparator, strlen(entrySeparator), 1, file);
         fclose(file);
-        freeHttpReqJObject(&reqObj);
     }
     if (logFlags & FILE_LOG && logFilePath != NULL) {
         FILE *file = fopen(logFilePath, "a");
         if (file == NULL) {
             return;
         }
-        fprintf(file, CONNECTION_NAME_FORMAT " Thread %ld %-16s %-7s %-50s | %d %s\n", connectionIndex, requestIndex, threadId,
-                clientIp, methodToStr(req->method), path, resp->status, statusToStr(resp->status));
+        fprintf(file, CONNECTION_NAME_FORMAT " Thread %ld %-16s %-7s %-50s | %d %s\n",
+            connectionIndex,
+            requestIndex,
+            threadId,
+            clientIp,
+            methodToStr(req->method),
+            req->path.raw,
+            resp->status,
+            statusToStr(resp->status)
+        );
         fclose(file);
     }
 }
@@ -191,7 +209,7 @@ void logErrorResponse(HttpReq *req, const char *error)
 {
     char path[1024];
     strncpy(path, req->path.raw, 1024);
-    long threadId = (long)pthread_self();
+    unsigned long threadId = pthread_self();
     char *clientIp = req->appState->clientSocket.ip;
     unsigned long connectionIndex = req->appState->connectionIndex;
     unsigned long requestIndex = req->appState->requestIndex;
@@ -212,7 +230,7 @@ void logErrorResponse(HttpReq *req, const char *error)
 }
 
 void printError(HttpReq *req, TcpSocket *client) {
-    long threadId = (long)pthread_self();
+    unsigned long threadId = pthread_self();
     unsigned long connectionIndex = req->appState->connectionIndex;
     unsigned long requestIndex = req->appState->requestIndex;
     fprintf(stderr, CONNECTION_NAME_FORMAT " " THREAD_NAME_FORMAT " %-16s %s\n", connectionIndex, requestIndex, THREAD_NAME_ARGS(threadId), client->ip, strerror(errno));

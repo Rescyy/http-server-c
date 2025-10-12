@@ -18,6 +18,8 @@ int strindex(const char *str, const char *find);
 int strnindex(const char *str, int n, const char *find);
 int isAlpha(char c);
 unsigned int hash(void *data, int len);
-char *getCurrentFormattedTime();
+size_t getCurrentFormattedTime(char *buf, size_t size);
+
+#define DECLARE_CURRENT_TIME(time) char time[128]; getCurrentFormattedTime(time, sizeof(time))
 
 #endif

@@ -1,10 +1,8 @@
-#include "src/app.h"
 #include <stdio.h>
-
-// #define TRACK_LEAK
 #include <pthread.h>
 #include <unistd.h>
 
+#include "src/app.h"
 #include "src/alloc.h"
 #include "logging.h"
 
@@ -18,11 +16,9 @@ HttpResp crudH(HttpReq);
 
 int main(int argc, char **argv)
 {
-#ifdef TRACK_LEAK
-    printf("Tracking leaks\n");
-    init_alloc();
-#endif
-    respBuilderSetDefaultFlags(0);
+    debug("Initialising App");
+    initApp();
+    debug("Adding Routes");
     addEndpoint("/hello", helloH);
     addEndpoint("/", indexH);
     addEndpoint("/stylesheet", stylesheetH);
@@ -32,6 +28,7 @@ int main(int argc, char **argv)
     setLogFile("logs.txt");
     setJsonLogFile("logs.json");
     setNotFoundCallback(notFoundH);
+    respBuilderSetDefaultFlags(0);
 
     if (argc == 2)
     {
@@ -50,22 +47,15 @@ HttpResp helloH(HttpReq) {
 
 HttpResp indexH(HttpReq)
 {
-    printf("Index entered\n");
     HttpRespBuilder builder = newRespBuilder();
-
-    respBuilderSetFileContent(&builder, "resources/index.html");
-    respBuilderAddHeader(&builder, "Content-Type", "text/html");
-
+    respBuilderSetFileContent(&builder, "resources/index.html", 0);
     return respBuild(&builder);
 }
 
 HttpResp stylesheetH(HttpReq)
 {
     HttpRespBuilder builder = newRespBuilder();
-
-    respBuilderSetFileContent(&builder, "resources/stylesheet.css");
-    respBuilderAddHeader(&builder, "Content-Type", "text/css");
-
+    respBuilderSetFileContent(&builder, "resources/stylesheet.css", 0);
     return respBuild(&builder);
 }
 
@@ -73,7 +63,7 @@ HttpResp notFoundH(HttpReq)
 {
     HttpRespBuilder builder = newRespBuilder();
 
-    respBuilderSetFileContent(&builder, "resources/404.html");
+    respBuilderSetFileContent(&builder, "resources/404.html", 0);
     respBuilderAddHeader(&builder, "Content-Type", "text/html");
 
     return respBuild(&builder);
@@ -86,7 +76,7 @@ HttpResp assetH(const HttpReq request)
     char assetPath[128];
     sprintf(assetPath, "assets/%s", request.path.elements[1]);
 
-    respBuilderSetFileContent(&builder, assetPath);
+    respBuilderSetFileContent(&builder, assetPath, 1);
 
     return respBuild(&builder);
 }
@@ -101,9 +91,8 @@ HttpResp jsonFormatterH(const HttpReq request) {
     } else {
         char *formatted;
         const size_t formattedSize = serializeJson(token.var, &formatted, 4);
-        respBuilderSetContent(&b, formatted, formattedSize);
-        freeJson(&token.var);
-        deallocate(formatted);
+        respBuilderSetContent(&b, formatted, formattedSize, 0);
+        respBuilderAddHeader(&b, "Content-Type", "application/json");
     }
 
     return respBuild(&b);
@@ -116,8 +105,6 @@ HttpResp crudH(HttpReq request) {
     const char *path = "data.json";
     FILE *fp = NULL;
     char *buf = NULL;
-    RESULT_T(JToken) token = {.ok = 0};
-    RESULT_T(JToken) reqToken = {.ok = 0};
 
     fp = fopen(path, "a+");
     if (!fp) {
@@ -137,34 +124,33 @@ HttpResp crudH(HttpReq request) {
     }
     rewind(fp);
 
-    buf = allocate(size);
+    buf = gcArenaAllocate(size, 1);
     fread(buf, 1, size, fp);
-    token = deserializeJson(buf, size);
+    RESULT_T(JToken) token = deserializeJson(buf, size);
     if (!token.ok || token.var.type != JSON_LIST) {
         static const char emptyList[] = "[]";
         token.ok = 1;
-        token.var = _JToken(_JListEmpty());
+        token.var = toJToken_JList(_JListEmpty());
         strcpy(buf, emptyList);
         ftruncate(fileno(fp), 0);
         rewind(fp);
         fwrite(buf, 1, strlen(emptyList), fp);
     }
-    deallocate(buf);
 
     switch (request.method) {
         case GET: {
             size_t length = serializeJson(token.var, &buf, 4);
-            respBuilderSetContent(&b, buf, length);
+            respBuilderSetContent(&b, buf, length, 0);
             break;
         }
         case POST: {
-            reqToken = deserializeJson(request.content, request.contentLength);
+            RESULT_T(JToken) reqToken = deserializeJson(request.content, request.contentLength);
             if (!reqToken.ok) {
                 respBuilderSetStatus(&b, BAD_REQUEST);
                 goto _return;
             }
             JList *list = &token.var.literal.list;
-            token.var.literal.list.tokens = list->tokens = reallocate(list->tokens, (list->count + 1) * sizeof(JToken));
+            token.var.literal.list.tokens = list->tokens = gcReallocate(list->tokens, (list->count + 1) * sizeof(JToken));
             list->tokens[list->count++] = reqToken.var;
             size = serializeJson(token.var, &buf, 0);
             rewind(fp);
@@ -180,9 +166,6 @@ HttpResp crudH(HttpReq request) {
     }
 
 _return:
-    if (token.ok) freeJson(&token.var);
-    if (reqToken.ok) freeJson(&reqToken.var);
-    deallocate(buf);
     if (fp) fclose(fp);
     pthread_mutex_unlock(&crud_mutex);
     return respBuild(&b);

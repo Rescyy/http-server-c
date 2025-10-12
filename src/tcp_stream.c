@@ -16,31 +16,25 @@
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define POLL_TIMEOUT (60 * 1000)
 
-TcpStream newTcpStream(TcpSocket *socket)
-{
+TcpStream *newTcpStream(TcpSocket *socket) {
     char *buffer = allocate(TCP_STREAM_BUFFER_SIZE);
-    if (buffer == NULL)
-    {
-        return (TcpStream){
-            .socket = NULL,
-            .error = errno,
-            .cursor = 0,
-            .length = 0,
-            .capacity = 0,
-            .buffer = NULL};
-    }
-    return (TcpStream){
+    TcpStream *stream = allocate(sizeof(TcpStream));
+    *stream = (TcpStream){
         .socket = socket,
         .error = 0,
         .cursor = 0,
         .length = 0,
         .capacity = TCP_STREAM_BUFFER_SIZE,
-        .buffer = buffer};
+        .buffer = buffer
+    };
+    return stream;
 }
 
 void freeTcpStream(TcpStream *stream)
 {
+    debug("Freeing tcp stream");
     deallocate(stream->buffer);
+    deallocate(stream);
 }
 
 #define MIN_FILL_SIZE 1024
@@ -80,7 +74,6 @@ void tcpStreamFill(TcpStream *stream, size_t length)
 
         switch (result.result) {
             case READ_OK:
-                debug("Received %zu bytes", result.received);
                 break;
             case READ_CLOSED:
                 stream->error = TCP_STREAM_CLOSED;

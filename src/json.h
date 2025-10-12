@@ -32,7 +32,7 @@ typedef struct {
 } JList;
 
 typedef struct {
-    char *value;
+    const char *value;
     size_t size;
 } JString;
 
@@ -55,7 +55,7 @@ typedef union
     JBool boolean;
 } JValue;
 
-DEFINE_ARRAY_H(char);
+DEFINE_ARRAY_H(char)
 
 struct JToken
 {
@@ -81,10 +81,8 @@ If you need to save space, reallocate the buffer.
 */
 size_t serializeJson(JToken element, char **buffer, int indent);
 RESULT_T(JToken) deserializeJson(const char *buffer, size_t len);
-void freeJson(JToken *token);
 int equalsJson(JToken *a, JToken *b);
 JToken *getValueJObject(JObject *object, JString *key);
-void addProperty(JObject *object, const char *key, JToken *token);
 
 JToken toJToken_JObject(JObject object);
 JToken toJToken_JList(JList array);
@@ -96,32 +94,18 @@ JToken toJToken_int(int number);
 JToken toJToken_long(long number);
 JToken toJToken_bool(bool boolean);
 JToken toJToken_string(ARRAY_T(char) string);
-JToken toJToken_cstring(char *cstring);
+JToken toJToken_cstring(const char *cstring);
 JToken toJToken_JToken(JToken token);
 JToken _JNull();
 JList _JListEmpty();
 JObject _JObjectEmpty();
 JString _JStringEmpty();
-#define _JToken(value) ((JToken) _Generic((value),\
-    JObject: toJToken_JObject,\
-    JList: toJToken_JList,\
-    JString: toJToken_JString,\
-    JNumber: toJToken_JNumber,\
-    JBool: toJToken_JBool,\
-    double: toJToken_double,\
-    int: toJToken_int,\
-    long: toJToken_long,\
-    bool: toJToken_bool,\
-    char *: toJToken_cstring,\
-    const char*: toJToken_cstring,\
-    JToken: toJToken_JToken\
-)(value))
 
 JObject toJObject_JProperties(const unsigned int count, ...);
 JList toJList_JTokens(const unsigned int count, ...);
 
 #define _JString(cstring) ((JString) {.value = cstring, .size = strlen(cstring)})
-#define _JProperty(cstring, token) ((JProperty) {.key = _JString(cstring), .value = _JToken(token)})
+#define _JProperty(cstring, token) ((JProperty) {.key = _JString(cstring), .value = token})
 #define _JList(...) toJList_JTokens((sizeof((JToken[]){__VA_ARGS__})/sizeof(JToken)), __VA_ARGS__)
 #define _JObject(...) toJObject_JProperties((sizeof((JProperty[]){__VA_ARGS__})/sizeof(JProperty)), __VA_ARGS__)
 

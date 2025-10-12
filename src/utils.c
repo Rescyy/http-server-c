@@ -114,8 +114,7 @@ unsigned int hash(void *_data, int len)
     return hash;
 }
 
-char *getCurrentFormattedTime() {
-    char *formattedTime = allocate(256);
+size_t getCurrentFormattedTime(char *buf, size_t size) {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
 
@@ -124,12 +123,9 @@ char *getCurrentFormattedTime() {
     gmtime_r(&ts.tv_sec, &tm_info);
 
     // format up to seconds
-    strftime(formattedTime, 256, "%Y-%m-%d %H:%M:%S", &tm_info);
-
+    size_t formattedSize = strftime(buf, size, "%Y-%m-%d %H:%M:%S", &tm_info);
     // append milliseconds
-    char millis[8];
-    snprintf(millis, sizeof(millis), ".%03ld", ts.tv_nsec / 1000000);
-    strncat(formattedTime, millis, 256 - strlen(formattedTime) - 1);
+    formattedSize += snprintf(buf + formattedSize, size - formattedSize, ".%03ld", ts.tv_nsec / 1000000);
 
-    return formattedTime;
+    return formattedSize;
 }

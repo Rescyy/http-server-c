@@ -26,6 +26,8 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 static HttpRouter router = {.capacity = -1};
+static pthread_t mainThreadId;
+static int wasInitialised = 0;
 
 void *handleConnectionThreadCall(void *arg);
 void handleConnection(SessionState *appState);
@@ -35,21 +37,59 @@ WriteResult sendFile(HttpResp *resp, TcpSocket *client);
 int handleError(int result, TcpSocket *client, HttpReq *request);
 int handleRequest(SessionState *state, TcpStream *stream);
 
+pthread_t getMainThreadId() {
+    return mainThreadId;
+}
+
+void initApp() {
+    if (wasInitialised) {
+        return;
+    }
+    wasInitialised = 1;
+    mainThreadId = (long) pthread_self();
+    debug("Initialising Session State Factory");
+    initSessionStateFactory();
+    debug("Initialising Garbage Collector");
+    gcInit();
+}
+
+void segfault_handler(int sig, siginfo_t *info, void *ucontext) {
+    (void)ucontext; // unused
+    fprintf(stderr, "Segmentation fault at address: %p\n", info->si_addr);
+    _exit(1); // exit immediately, safe in signal handler
+}
+
+void setup_segfault_handler() {
+    struct sigaction sa;
+    sa.sa_sigaction = segfault_handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+    if (sigaction(SIGSEGV, &sa, NULL) == -1) {
+        perror("sigaction");
+        exit(1);
+    }
+}
+
 void startApp(char *port) {
-    fflush(stdout);
+    initApp();
+
+    setup_segfault_handler();
+
     signal(SIGPIPE, SIG_IGN);
 
     if (router.capacity == -1) {
         router = emptyRouter();
     }
+
     pthread_t thread1;
 
     TcpSocket socket = socketListen(port);
+
     if (socket.closed) {
         fatal("Failed listening to socket");
         exit(1);
     }
-    info(NULL, "Listening to port %s", port);
+    info("Listening to port %s", port);
 
     int connectionIndex = 1;
 
@@ -71,26 +111,27 @@ void startApp(char *port) {
 }
 
 void *handleConnectionThreadCall(void *arg) {
-    start_alloc_tracking();
-    SessionState *state = arg;
-    setCurrentThreadSessionState(state);
-    handleConnection(state);
-    info("Closing connection");
-    closeSocket(state->clientSocket);
-    stop_alloc_tracking();
+    setSessionState(arg);
+    handleConnection(arg);
     pthread_exit(NULL);
+    return NULL;
 }
 
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 3072UL
 
 void handleConnection(SessionState *appState) {
-    TcpStream stream = newTcpStream(&appState->clientSocket);
-
-    while (handleRequest(appState, &stream)) {
+    gcTrack();
+    TcpStream *stream = newTcpStream(&appState->clientSocket);
+    attachDestructor((destructor_t) freeTcpStream, stream);
+    while (1) {
+        int shouldCloseConnection = !handleRequest(appState, stream);
+        if (shouldCloseConnection) {
+            break;
+        }
+        tcpStreamDrain(stream);
+        gcCleanup();
         appState->requestIndex++;
     }
-
-    freeTcpStream(&stream);
 }
 
 int handleRequest(SessionState *state, TcpStream *stream) {
@@ -102,23 +143,23 @@ int handleRequest(SessionState *state, TcpStream *stream) {
     int action = handleError(result, &state->clientSocket, &request);
     switch (action) {
         case 1:
-            freeReq(&request);
-            tcpStreamDrain(stream);
             return 0;
         case 2:
-            freeReq(&request);
-            tcpStreamDrain(stream);
             return 1;
         default:
             break;
     }
 
+    debug("Connection keep alive");
     int connectionKeepAlive = isConnectionKeepAlive(&request);
 
+    debug("Routing request");
     resp = routeReq(router, request);
 
     logResponse(&resp, &request);
+
     WriteResult sendResult = sendResponse(&resp, &state->clientSocket);
+
     switch (sendResult.result) {
         case WRITE_OK:
             break;
@@ -131,10 +172,6 @@ int handleRequest(SessionState *state, TcpStream *stream) {
         default:
             error("Failed sending response");
     }
-
-    freeResp(&resp);
-    freeReq(&request);
-    tcpStreamDrain(stream);
 
     return connectionKeepAlive;
 }
@@ -195,34 +232,28 @@ int handleError(int result, TcpSocket *client, HttpReq *request) {
 
 WriteResult sendResponse(HttpResp *resp, TcpSocket *client) {
     char stackBuffer[BUFFER_SIZE];
-    int responseSize = buildRespStringUntilContent(resp, stackBuffer, BUFFER_SIZE);
-    WriteResult respResult, contentResult;
+    char *responseBuffer = stackBuffer;
+
+    size_t responseSize = buildRespStringUntilContent(resp, stackBuffer, BUFFER_SIZE);
+
     if (responseSize > BUFFER_SIZE) {
         /* if stackBuffer not big enough */
-        char *responseBuffer = allocate(responseSize);
+        responseBuffer = gcArenaAllocate(responseSize, alignof(char));
         buildRespStringUntilContent(resp, responseBuffer, responseSize);
-        respResult = transmit(client, responseBuffer, responseSize);
-        if (respResult.result != WRITE_OK) {
-            deallocate(responseBuffer);
-            return respResult;
-        }
-        contentResult = sendContent(resp, client);
-        deallocate(responseBuffer);
-        if (contentResult.result != WRITE_OK) {
-            contentResult.sent += respResult.sent;
-            return contentResult;
-        }
-    } else {
-        respResult = transmit(client, stackBuffer, responseSize);
-        if (respResult.result != WRITE_OK) {
-            return respResult;
-        }
-        contentResult = sendContent(resp, client);
-        if (contentResult.result != WRITE_OK) {
-            contentResult.sent += respResult.sent;
-            return contentResult;
-        }
     }
+
+    WriteResult respResult = transmit(client, responseBuffer, responseSize);
+
+    if (respResult.result != WRITE_OK) {
+        return respResult;
+    }
+
+    WriteResult contentResult = sendContent(resp, client);
+    if (contentResult.result != WRITE_OK) {
+        contentResult.sent += respResult.sent;
+        return contentResult;
+    }
+
     return (WriteResult) {.result = WRITE_OK, .sent = contentResult.sent + respResult.sent};
 }
 
@@ -231,7 +262,6 @@ WriteResult sendContent(HttpResp *resp, TcpSocket *client) {
         return (WriteResult) {.result = WRITE_OK, .sent = 0};
     }
     if (resp->isContentFile) {
-        debug("Sending file content %s", resp->content);
         return sendFile(resp, client);
     }
     return transmit(client, resp->content, resp->contentLength);
@@ -241,7 +271,7 @@ WriteResult sendFile(HttpResp *resp, TcpSocket *client) {
     int fd = open(resp->content, O_RDONLY);
     if (fd < 0) {
         char errorBuffer[256];
-        snprintf(errorBuffer, sizeof(errorBuffer), "Error opening file %s for sendFile\n", (char*) resp->content);
+        snprintf(errorBuffer, sizeof(errorBuffer), "Error opening file %s for sendFile", (char*) resp->content);
         perror(errorBuffer);
         return (WriteResult) {.result = WRITE_OPEN_ERROR, .sent = 0};
     }
@@ -270,6 +300,7 @@ WriteResult sendFile(HttpResp *resp, TcpSocket *client) {
 }
 
 void addEndpoint(char *path, HttpReqHandler handler) {
+    info("Adding Endpoint %s", path);
     if (router.capacity == -1) {
         router = emptyRouter();
     }

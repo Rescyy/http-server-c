@@ -5,6 +5,7 @@
 #ifndef APP_STATE_H
 #define APP_STATE_H
 #include "connection.h"
+#include "alloc.h"
 
 typedef struct {
     TcpSocket clientSocket;
@@ -12,8 +13,9 @@ typedef struct {
     unsigned long requestIndex;
 } SessionState;
 
+void initSessionStateFactory();
 SessionState *newSessionState();
-void setCurrentThreadSessionState(SessionState *state);
-SessionState *getCurrentThreadSessionState();
+void setSessionState(SessionState *state);
+SessionState *getSessionState();
 
 #endif //APP_STATE_H

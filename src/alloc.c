@@ -6,239 +6,374 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <string.h>
+#include <stddef.h>
+#include <assert.h>
 
 #include "alloc.h"
 
-// ---------------- Tracking state ----------------
+#include <unistd.h>
 
-typedef struct {
-    void *ptr;
-    size_t size;
-    char *locationHistory;
-    int in_use;
-} TrackEntry;
+#include "app.h"
+#include "logging.h"
 
-typedef struct {
-    TrackEntry *g_entries;
-    long threadId;
-    size_t g_count;
-    size_t g_cap;
-} TrackArray;
-
-pthread_key_t g_alloc_key;
+#define MAX(a,b) (((a) > (b)) ? (a) : (b))
 
 static void exitIfOutOfMemory(const void *ptr) {
-    if (ptr == NULL) {
+    if (ptr != NULL) {
+        return;
+    }
+    pthread_t threadId = pthread_self();
+    if (pthread_equal(threadId, getMainThreadId())) {
         fprintf(stderr, "The program is out of memory\n");
         exit(1);
     }
+    fprintf(stderr, "The thread %lu did not receive the required memory\n", (unsigned long) threadId);
+    pthread_exit(NULL);
 }
 
-static long current_thread_id(void) {
-    return (long)pthread_self();
-}
-
-static void ensure_capacity(TrackArray *trackArray, const size_t need) {
-    size_t g_cap = trackArray->g_cap;
-    if (g_cap >= need) return;
-    size_t new_cap = g_cap ? g_cap * 2 : 128;
-    while (new_cap < need) new_cap *= 2;
-    trackArray->g_entries = _reallocate(trackArray->g_entries, new_cap * sizeof(TrackEntry));
-    trackArray->g_cap = new_cap;
-}
-
-static TrackEntry *find_entry(const TrackArray *trackArray, const void *ptr) {
-    TrackEntry *entries = trackArray->g_entries;
-    for (size_t i = 0; i < trackArray->g_count; ++i) {
-        if (entries[i].in_use && entries[i].ptr == ptr) return &entries[i];
-    }
-    return NULL;
-}
-
-static char *initLocationHistory(const char *path, const int line) {
-    size_t locationHistorySize = strlen(path) + 20;
-    char *locationHistory = _allocate(locationHistorySize);
-    snprintf(locationHistory, locationHistorySize, "%s:%d", path, line);
-    return locationHistory;
-}
-
-static char *appendLocationHistory(char *locationHistory, const char *path, int line) {
-    size_t locationHistorySize = strlen(locationHistory) + strlen(path) + 20;
-    char *newLocationHistory = _allocate(locationHistorySize);
-    snprintf(newLocationHistory, locationHistorySize, "%s -> %s", locationHistory, initLocationHistory(path, line));
-    _deallocate(locationHistory);
-    return newLocationHistory;
-}
-
-static void track_add(void *ptr, size_t size, const char *file, int line) {
-#ifdef TRACK_LEAK
-    TrackArray *trackArray = pthread_getspecific(g_alloc_key);
-    if (trackArray == NULL) return;
-    ensure_capacity(trackArray, trackArray->g_count + 1);
-    trackArray->g_entries[trackArray->g_count++] = (TrackEntry){ ptr, size, initLocationHistory(file, line), 1 };
-#endif
-}
-
-static void track_remove(void *ptr) {
-#ifdef TRACK_LEAK
-    TrackArray *trackArray = pthread_getspecific(g_alloc_key);
-    if (trackArray == NULL) return;
-    TrackEntry *entry = find_entry(trackArray, ptr);
-    if (entry != NULL) {
-        entry->in_use = 0;
-    }
-#endif
-}
-
-static void track_update(void *old_ptr, void *new_ptr, size_t size, const char *file, int line) {
-#ifdef TRACK_LEAK
-    TrackArray *trackArray = pthread_getspecific(g_alloc_key);
-    if (trackArray == NULL) return;
-    TrackEntry *entry = find_entry(trackArray, old_ptr);
-    if (entry != NULL) {
-        entry->ptr = new_ptr;
-        entry->size = size;
-        char *locationHistory = entry->locationHistory;
-        entry->locationHistory = appendLocationHistory(locationHistory, file, line);
-    } else {
-        printf("Tracker: old ptr not found when reallocating\n");
-    }
-#endif
-}
-
-static void dump_leaks(const TrackArray *trackArray) {
-#ifdef LEAK_FILE
-    FILE *logFile = NULL;
-    logFile = fopen(LEAK_FILE, "a");
-    TrackEntry *g_entries = trackArray->g_entries;
-
-    for (size_t i = 0; i < trackArray->g_count; ++i) {
-        if (g_entries[i].in_use) {
-            if (logFile) {
-                fprintf(logFile, "%ld,%s,%lu,%p\n",
-                        trackArray->threadId,
-                        g_entries[i].locationHistory,
-                        (unsigned long)g_entries[i].size,
-                        g_entries[i].ptr);
-            }
-            fprintf(stderr, "[LEAK] thread=%ld ptr=%p size=%lu at %s\n",
-                    trackArray->threadId,
-                    g_entries[i].ptr,
-                    (unsigned long)g_entries[i].size,
-                    g_entries[i].locationHistory);
-            g_entries[i].in_use = 0;
-        }
-    }
-
-    if (logFile) fclose(logFile);
-#endif
-}
-
-void init_file(const char *path, const char *first_line) {
-    FILE *f = fopen(ALLOC_FILE, "w");
-    fwrite(first_line, 1, strlen(first_line), f);
-    fclose(f);
-}
-
-void init_alloc(void) {
-    pthread_key_create(&g_alloc_key, NULL);
-    pthread_setspecific(g_alloc_key, NULL);
-    init_file(ALLOC_FILE, "Type,ThreadID,File,Line,Size,Pointer\n");
-    init_file(LEAK_FILE,"ThreadID,LocationHistory,Size,Pointer\n");
-}
-
-// Public control
-void start_alloc_tracking(void) {
-#ifdef TRACK_LEAK
-    TrackArray *trackArray = _allocate(sizeof(TrackArray));
-    trackArray->g_cap = 1000;
-    trackArray->g_entries = _allocate(sizeof(TrackEntry) * trackArray->g_cap);
-    trackArray->g_count = 0;
-    trackArray->threadId = current_thread_id();
-    pthread_setspecific(g_alloc_key, trackArray);
-#endif
-}
-
-void stop_alloc_tracking(void) {
-#ifdef TRACK_LEAK
-    TrackArray *trackArray = pthread_getspecific(g_alloc_key);
-    dump_leaks(trackArray);
-    for (size_t i = 0; i < trackArray->g_count; ++i) {
-        _deallocate(trackArray->g_entries[i].locationHistory);
-    }
-    _deallocate(trackArray->g_entries);
-    _deallocate(trackArray);
-    pthread_setspecific(g_alloc_key, NULL);
-#endif
-}
-
-// ---------------- Logging backends ----------------
-
-static void log_write(const char *kind, const char *file, int line, size_t size, void *ptr) {
-#ifdef ALLOC_FILE
-    FILE *logFile = fopen(ALLOC_FILE, "a");
-    if (logFile) {
-        long threadId = current_thread_id();
-        if (size) {
-            fprintf(logFile, "%s,%ld,%s,%d,%lu,%p\n",
-                    kind, threadId, file, line, (unsigned long)size, ptr);
-        } else {
-            fprintf(logFile, "%s,%ld,%s,%d,,%p\n",
-                    kind, threadId, file, line, ptr);
-        }
-        fclose(logFile);
-    }
-#else
-    (void)kind; (void)file; (void)line; (void)size; (void)ptr;
-#endif
-}
-
-void *_allocateTrack(size_t size, const char *file, int line)
-{
-    void *ptr = _allocate(size);
-    track_add(ptr, size, file, line);
-    log_write("Alloc", file, line, size, ptr);
-    return ptr;
-}
-
-void _deallocateTrack(void *ptr, const char *file, int line)
-{
-    log_write("Free", file, line, 0, ptr);
-    track_remove(ptr);
-    _deallocate(ptr);
-}
-
-void *_reallocateTrack(void *ptr, size_t size, const char *file, int line)
-{
-    if (ptr == NULL) return _allocateTrack(size, file, line);
-    void *newPtr = _reallocate(ptr, size);
-    log_write("Free",  file, line, 0, ptr);
-    track_update(ptr, newPtr, size, file, line);
-    log_write("Alloc", file, line, size, newPtr);
-    return newPtr;
-}
-
-// ---------------- Plain backends ----------------
-
-void *_allocate(size_t size)
+void *allocate(size_t size)
 {
     if (size == 0) return NULL;
+    fflush(stdout);
     void *ptr = malloc(size);
+    fflush(stdout);
     exitIfOutOfMemory(ptr);
     return ptr;
 }
 
-void *_reallocate(void *ptr, size_t size)
+void *reallocate(void *ptr, size_t size)
 {
     if (size == 0) return NULL;
-    if (ptr == NULL) return _allocate(size);
+    if (ptr == NULL) return allocate(size);
     void *newPtr = realloc(ptr, size);
     exitIfOutOfMemory(newPtr);
     return newPtr;
 }
 
-void _deallocate(void *ptr)
+void deallocate(void *ptr)
 {
     if (ptr == NULL) return;
     free(ptr);
+}
+
+typedef struct {
+    void *ptr;
+    size_t size;
+    size_t capacity;
+} ArenaChunk;
+
+TYPEDEF_ARRAY(ArenaChunk);
+DEFINE_ARRAY_FUNCS(ArenaChunk, allocate, reallocate)
+
+typedef struct {
+    ARRAY_T(ArenaChunk) chunks;
+    unsigned int openFrom;
+    unsigned int lastSentFrom;
+    unsigned int tries;
+} Arena;
+
+typedef struct {
+    void *ptr;
+    void *prevPtr;
+} AllocEntry;
+
+TYPEDEF_ARRAY(AllocEntry);
+DEFINE_ARRAY_FUNCS(AllocEntry, allocate, reallocate)
+
+typedef struct {
+    ARRAY_T(AllocEntry) arr;
+    int toDeallocate;
+} AllocEntries;
+
+typedef struct {
+    void (*func)(void *ptr);
+    void *ptr;
+} Destructor;
+
+TYPEDEF_ARRAY(Destructor);
+DEFINE_ARRAY_FUNCS(Destructor, allocate, reallocate)
+
+static pthread_key_t arenaThreadKey;
+static pthread_key_t entriesThreadKey;
+static pthread_key_t destructorsThreadKey;
+
+static void cleanupEntries(AllocEntries *entries);
+static void cleanupArena(Arena *arena);
+static void destroyEntries(AllocEntries *entries);
+static void destroyArena(Arena *arena);
+static void bundleEntriesAndDeallocate(const AllocEntries *entries);
+static ArenaChunk newArenaChunk(size_t capacity);
+static void invokeDestructors(ARRAY_T(Destructor) *destructors);
+
+static Arena *getArena() {
+    Arena *arena = pthread_getspecific(arenaThreadKey);
+    return arena;
+}
+
+static AllocEntries *getEntries() {
+    AllocEntries *entries = pthread_getspecific(entriesThreadKey);
+    return entries;
+}
+
+static ARRAY_T(Destructor) *getDestructors() {
+    ARRAY_T(Destructor) *destructors = pthread_getspecific(destructorsThreadKey);
+    return destructors;
+}
+
+static void setArena(const Arena *arena) {
+    pthread_setspecific(arenaThreadKey, arena);
+}
+
+static void setEntries(const AllocEntries *entries) {
+    pthread_setspecific(entriesThreadKey, entries);
+}
+
+static void setDestructors(const ARRAY_T(Destructor) *destructors) {
+    pthread_setspecific(destructorsThreadKey, destructors);
+}
+
+static void destroyArenaWrapper(void *ptr) {
+    destroyArena(ptr);
+}
+
+static void destroyEntriesWrapper(void *ptr) {
+    destroyEntries(ptr);
+}
+
+static void invokeDestructorsWrapper(void *ptr) {
+    invokeDestructors(ptr);
+}
+
+void gcInit() {
+    pthread_key_create(&entriesThreadKey, NULL);
+    pthread_key_create(&arenaThreadKey, NULL);
+    pthread_key_create(&destructorsThreadKey, invokeDestructorsWrapper);
+
+}
+
+#define ARENA_MAX_TRIES 3
+#define ARENA_PAGE_CAP (1 << 12)    // 4 KB
+#define ENTRIES_PAGE_CAP (1 << 8)   // 4 KB / 16 B
+
+void gcTrack() {
+    AllocEntries *entries = allocate(sizeof(AllocEntries));
+    *entries = (AllocEntries) {
+        .arr = ARRAY_WITH_CAPACITY(AllocEntry, ENTRIES_PAGE_CAP),
+        .toDeallocate = 0,
+    };
+    setEntries(entries);
+
+    Arena *arena = allocate(sizeof(Arena));
+    *arena = (Arena) {
+        .chunks = ARRAY_NEW(ArenaChunk),
+        .openFrom = 0,
+    };
+    ARRAY_PUSH(ArenaChunk, &arena->chunks, newArenaChunk(ARENA_PAGE_CAP));
+    ARRAY_T(Destructor) *destructors = allocate(SIZEOF_ARRAY);
+    setArena(arena);
+
+    *destructors = ARRAY_NEW(Destructor);
+    setDestructors(destructors);
+
+    attachDestructor(destroyEntriesWrapper, entries);
+    attachDestructor(destroyArenaWrapper, arena);
+}
+
+void gcCleanup() {
+    debug("Cleaning up allocations");
+    cleanupEntries(getEntries());
+    cleanupArena(getArena());
+}
+
+static void *chunkAlloc(ArenaChunk *chunk, size_t size, int align) {
+    chunk->size = ((chunk->size - 1) / align + 1) * align;
+    void *returnPtr = (char*) chunk->ptr + chunk->size;
+    chunk->size += size;
+    return returnPtr;
+}
+
+void *gcArenaAllocate(const size_t size, int align) {
+    Arena *arena = getArena();
+    if (arena == NULL) {
+        return allocate(size);
+    }
+
+    const int sizeInt = (int) size;
+
+    if (size >= ARENA_PAGE_CAP) {
+        ArenaChunk *chunk = &arena->chunks.data[arena->chunks.length - 1];
+        if (chunk->capacity >= chunk->size + size) {
+            return chunkAlloc(chunk, sizeInt, align);
+        }
+        ARRAY_PUSH(ArenaChunk, &arena->chunks, newArenaChunk(size));
+        chunk = &arena->chunks.data[arena->chunks.length - 1];
+        arena->lastSentFrom = arena->chunks.length - 1;
+        chunk->size = sizeInt;
+        return chunk->ptr;
+    }
+
+    void *returnPtr = NULL;
+
+    for (unsigned int i = arena->openFrom; i < arena->chunks.length; i++) {
+        if (arena->chunks.data[i].capacity - arena->chunks.data[i].size >= size) {
+            returnPtr = chunkAlloc(&arena->chunks.data[i], size, align);
+            arena->lastSentFrom = i;
+            break;
+        }
+    }
+
+    if (returnPtr == NULL) {
+        ARRAY_PUSH(ArenaChunk, &arena->chunks, newArenaChunk(ARENA_PAGE_CAP));
+        ArenaChunk *chunk = &arena->chunks.data[arena->chunks.length - 1];
+        chunk->size = sizeInt;
+        returnPtr = chunk->ptr;
+        arena->lastSentFrom = arena->chunks.length - 1;
+    }
+
+    if (arena->lastSentFrom == arena->openFrom) {
+        arena->tries = 0;
+    } else {
+        arena->tries++;
+    }
+
+    if (arena->tries >= ARENA_MAX_TRIES) {
+        arena->openFrom = arena->lastSentFrom;
+    }
+
+    return returnPtr;
+}
+
+void gcArenaGiveBack(size_t size) {
+    Arena *arena = getArena();
+    if (arena == NULL) {
+        return;
+    }
+    ArenaChunk *chunk = &arena->chunks.data[arena->lastSentFrom];
+    assert(chunk->size >= size);
+    chunk->size -= size;
+}
+
+void *gcAllocate(size_t size) {
+    void *ptr = allocate(size);
+    AllocEntries *entries = getEntries();
+    if (entries == NULL) {
+        return ptr;
+    }
+    AllocEntry entry = {
+        .ptr = ptr,
+        .prevPtr = NULL,
+    };
+    ARRAY_PUSH(AllocEntry, &entries->arr, entry);
+    entries->toDeallocate++;
+    return ptr;
+}
+
+void *gcReallocate(void *ptr, size_t size) {
+    void *newPtr = reallocate(ptr, size);
+    AllocEntries *entries = getEntries();
+    if (entries == NULL) {
+        return newPtr;
+    }
+    if (newPtr != ptr) {
+        AllocEntry entry = {
+            .ptr = newPtr,
+            .prevPtr = ptr,
+        };
+        AllocEntries *entries = getEntries();
+        ARRAY_PUSH(AllocEntry, &entries->arr, entry);
+    }
+    return newPtr;
+}
+
+void attachDestructor(destructor_t func, void *ptr) {
+    Destructor destructor = {
+        .func = func,
+        .ptr = ptr,
+    };
+    ARRAY_T(Destructor) *destructors = getDestructors();
+    ARRAY_PUSH(Destructor, destructors, destructor);
+}
+
+void invokeDestructors(ARRAY_T(Destructor) *destructors) {
+    debug("Invoking destructors %u", destructors->length);
+    for (int i = destructors->length - 1; i >= 0; i--) {
+        destructors->data[i].func(destructors->data[i].ptr);
+    }
+    deallocate(destructors->data);
+    deallocate(destructors);
+}
+
+static void cleanupEntries(AllocEntries *entries) {
+    debug("Cleaning up Entries %u to deallocate %u", entries->arr.length, entries->toDeallocate);
+    bundleEntriesAndDeallocate(entries);
+    ARRAY_RESIZE(AllocEntry, &entries->arr, 0, ENTRIES_PAGE_CAP);
+    entries->toDeallocate = 0;
+}
+
+static void cleanupArena(Arena *arena) {
+    debug("Cleaning up Arena %u Chunks", arena->chunks.length);
+    for (size_t i = 1; i < arena->chunks.length; i++) {
+        deallocate(arena->chunks.data[i].ptr);
+    }
+    ARRAY_RESIZE(ArenaChunk, &arena->chunks, 1, 1);
+    arena->chunks.data[0].size = 0;
+    arena->lastSentFrom = 0;
+    arena->openFrom = 0;
+    arena->tries = 0;
+}
+
+static void destroyEntries(AllocEntries *entries) {
+    debug("Cleaning up Entries %u to deallocate %u", entries->arr.length, entries->toDeallocate);
+    bundleEntriesAndDeallocate(entries);
+    deallocate(entries->arr.data);
+    deallocate(entries);
+}
+
+static void destroyArena(Arena *arena) {
+    debug("Cleaning up Arena %u Chunks", arena->chunks.length);
+    for (size_t i = 0; i < arena->chunks.length; i++) {
+        deallocate(arena->chunks.data[i].ptr);
+    }
+    deallocate(arena->chunks.data);
+    deallocate(arena);
+}
+
+static size_t ptrHashFunction(void *ptr) {
+    size_t asSizeT = (size_t) ptr;
+    return asSizeT >> 7 ^ asSizeT >> 4;
+}
+
+static void bundleEntriesAndDeallocate(const AllocEntries *entries) {
+    const ARRAY_T(AllocEntry) *arr = &entries->arr;
+    const size_t setCapacity = entries->toDeallocate * 2;
+    void **allocPtr = calloc(setCapacity, sizeof(void *));
+    for (size_t i = 0; i < arr->length; i++) {
+        void *prevPtr = arr->data[i].prevPtr;
+        void *ptr = arr->data[i].ptr;
+        if (prevPtr != NULL) {
+            size_t prevPtrHash = ptrHashFunction(prevPtr) % setCapacity;
+            while (allocPtr[prevPtrHash] != prevPtr) {
+                prevPtrHash = (prevPtrHash + 1) % setCapacity;
+            }
+            allocPtr[prevPtrHash] = NULL;
+        }
+        size_t ptrHash = ptrHashFunction(ptr) % setCapacity;
+        while (allocPtr[ptrHash] != NULL) {
+            ptrHash = (ptrHash + 1) % setCapacity;
+        }
+        allocPtr[ptrHash] = ptr;
+    }
+    for (size_t i = 0; i < setCapacity; i++) {
+        deallocate(allocPtr[i]);
+    }
+    free(allocPtr);
+}
+
+static ArenaChunk newArenaChunk(size_t capacity) {
+    size_t actualCapacity = ((capacity - 1) / ARENA_PAGE_CAP + 1) * ARENA_PAGE_CAP;
+    return (ArenaChunk) {
+        .ptr = allocate(actualCapacity),
+        .size = 0,
+        .capacity = actualCapacity,
+    };
 }

@@ -6,31 +6,35 @@
 
 #include "app_state.h"
 #include "alloc.h"
+#include "logging.h"
 
+static int keyIsCreated = 0;
+static pthread_key_t sessionStateKey;
 
 SessionState *newSessionState() {
     SessionState *state = allocate(sizeof(SessionState));
     state->requestIndex = 1;
+    return state;
 }
 
-static pthread_key_t sessionStateKey;
-static pthread_once_t sessionStateKeyOnce = PTHREAD_ONCE_INIT;
-
-static void freeSessionState(void *state) {
-    deallocate(state);
+static void freeSessionState(void *ptr) {
+    SessionState *state = ptr;
+    info("Closing connection %d with %s", state->connectionIndex, state->clientSocket.ip);
+    closeSocket(&state->clientSocket);
+    deallocate(ptr);
 }
 
-static void createSessionStateKey() {
+void initSessionStateFactory() {
     pthread_key_create(&sessionStateKey, freeSessionState);
+    keyIsCreated = 1;
 }
 
-void setCurrentThreadSessionState(SessionState *state) {
-    pthread_once(&sessionStateKeyOnce, createSessionStateKey);
+void setSessionState(SessionState *state) {
     pthread_setspecific(sessionStateKey, state);
 }
 
-SessionState *getCurrentThreadSessionState() {
-    return pthread_getspecific(sessionStateKey);
+SessionState *getSessionState() {
+    return keyIsCreated ? pthread_getspecific(sessionStateKey) : NULL;
 }
 
 

@@ -50,11 +50,11 @@ typedef struct ReadResult {
 TcpSocket socketListen(port_t port);
 TcpSocket acceptConnection(TcpSocket socket);
 TcpSocket socketConnect(char *host, port_t port);
-void closeSocket(TcpSocket sock);
+void closeSocket(TcpSocket *sock);
 ReadEnum canRead(int fd, int timeoutMs);
 ReadResult receive(TcpSocket *sock, void *buffer, size_t size);
 WriteEnum canWrite(int fd, int timeoutMs);
-WriteResult transmit(TcpSocket *sock, void *buffer, size_t size);
+WriteResult transmit(TcpSocket *sock, const void *buffer, size_t size);
 int getClientIp(int fd, char *ip);
 
 #endif //CONNECTION_H

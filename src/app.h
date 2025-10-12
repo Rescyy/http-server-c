@@ -14,10 +14,11 @@ typedef HttpResp (*HttpReqHandler) (HttpReq);
 /*
     asserts whether the app started or not succesfully
 */
+void initApp();
 void startApp(char* port);
 void addEndpoint(char *path, HttpReqHandler handler);
 void setNotFoundCallback(HttpReqHandler handler);
 void setLogFile(const char *path);
-
+pthread_t getMainThreadId();
 
 #endif //APP_H

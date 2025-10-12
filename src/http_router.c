@@ -19,9 +19,9 @@ static HttpResp defaultNotFoundCallback(HttpReq _)
 
 HttpResp htmlNotFoundCallback(HttpReq _) {
     HttpRespBuilder builder = newRespBuilder();
-    char notFoundContent[] = "<!DOCTYPE html><body><head>NOT FOUND 404</head></body>";
+    static const char notFoundContent[] = "<!DOCTYPE html><body><head>NOT FOUND 404</head></body>";
     respBuilderSetStatus(&builder, NOT_FOUND);
-    respBuilderSetContent(&builder, notFoundContent, sizeof(notFoundContent) - 1);
+    respBuilderSetContent(&builder, notFoundContent, sizeof(notFoundContent) - 1, 0);
     respBuilderAddHeader(&builder, "Content-Type", "text/html");
     HttpResp resp = respBuild(&builder);
     return resp;
@@ -68,30 +68,13 @@ void routerAddEndpoint(HttpRouter *router, HttpEndpoint endpoint)
     assert(router != NULL);
     if (router->endpoints == NULL)
     {
-        router->endpoints = allocate(sizeof(HttpEndpoint));
+        router->endpoints = gcAllocate(sizeof(HttpEndpoint));
         router->capacity = 1;
     }
     if (router->length >= router->capacity)
     {
         router->capacity *= 2;
-        router->endpoints = reallocate(router->endpoints, router->capacity * sizeof(HttpEndpoint));
+        router->endpoints = gcReallocate(router->endpoints, router->capacity * sizeof(HttpEndpoint));
     }
     router->endpoints[router->length++] = endpoint;
-}
-
-void freeEndpoint(HttpEndpoint *endpoint)
-{
-    freePath(&endpoint->path);
-    endpoint->handler = NULL;
-}
-
-void freeRouter(HttpRouter *router)
-{
-    for (int i = 0; i < router->length; i++)
-    {
-        freeEndpoint(&router->endpoints[i]);
-    }
-    router->endpoints = NULL;
-    router->notFoundCallback = NULL;
-    router->length = 0;
 }

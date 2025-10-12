@@ -17,9 +17,7 @@ typedef struct HttpHeaders {
     int count;
 } HttpHeaders;
 
-int parseHeaders(HttpHeaders *headers, const char *str, int size);
 int parseHeadersStream(HttpHeaders *headers, TcpStream *stream);
-void freeHeaders(HttpHeaders *headers);
 int isVersionValid(const char *str, int n);
 int getVersionNumber(const char *str, int n);
 int headerEq(HttpHeader obj1, HttpHeader obj2);

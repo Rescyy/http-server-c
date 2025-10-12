@@ -169,9 +169,9 @@ TcpSocket socketConnect(char *host, port_t port)
     return conn;
 }
 
-void closeSocket(TcpSocket sock)
+void closeSocket(TcpSocket *sock)
 {
-    close(sock.fd);
+    close(sock->fd);
 }
 
 ReadEnum canRead(int fd, int timeoutMs) {
@@ -194,7 +194,7 @@ ReadEnum canRead(int fd, int timeoutMs) {
     return READ_OK;
 }
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t socketLogMutex = PTHREAD_MUTEX_INITIALIZER;
 
 ReadResult receive(TcpSocket *sock, void *buffer, size_t size) {
     if (sock->closed) {
@@ -234,14 +234,13 @@ ReadResult receive(TcpSocket *sock, void *buffer, size_t size) {
         };
     }
 
-    char *time = getCurrentFormattedTime();
-    pthread_mutex_lock(&mutex);
+    DECLARE_CURRENT_TIME(time);
+    pthread_mutex_lock(&socketLogMutex);
     FILE *socketFile = fopen("socketLog.txt", "ab");
-    fprintf(socketFile, "%s Received %zd bytes\nbegin:\n", time, recvd);
+    fprintf(socketFile, "\n%s Received %zd bytes\nbegin:\n", time, recvd);
     fwrite(buffer, 1, recvd, socketFile);
     fclose(socketFile);
-    pthread_mutex_unlock(&mutex);
-    deallocate(time);
+    pthread_mutex_unlock(&socketLogMutex);
 
     return (ReadResult) {
         .result = READ_OK,
@@ -269,7 +268,7 @@ WriteEnum canWrite(int fd, int timeoutMs) {
     return WRITE_OK;
 }
 
-WriteResult transmit(TcpSocket *sock, void *buffer, size_t size) {
+WriteResult transmit(TcpSocket *sock, const void *buffer, size_t size) {
     if (sock->closed) {
         return (WriteResult) {
             .result = WRITE_CLOSED,
@@ -311,14 +310,13 @@ WriteResult transmit(TcpSocket *sock, void *buffer, size_t size) {
             };
         }
 
-        char *time = getCurrentFormattedTime();
-        pthread_mutex_lock(&mutex);
+        DECLARE_CURRENT_TIME(time);
+        pthread_mutex_lock(&socketLogMutex);
         FILE *socketFile = fopen("socketLog.txt", "ab");
-        fprintf(socketFile, "%s Sent %zd bytes\nbegin:\n", time, sent);
+        fprintf(socketFile, "\n%s Sent %zd bytes\nbegin:\n", time, sent);
         fwrite(buffer + totalSent, 1, sent, socketFile);
         fclose(socketFile);
-        pthread_mutex_unlock(&mutex);
-        deallocate(time);
+        pthread_mutex_unlock(&socketLogMutex);
 
         totalSent += sent;
     }

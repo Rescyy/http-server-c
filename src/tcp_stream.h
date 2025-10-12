@@ -21,7 +21,7 @@ typedef struct TcpStream {
 } TcpStream;
 
 /* Creates a blocking TcpStream. */
-TcpStream newTcpStream(TcpSocket *socket);
+TcpStream *newTcpStream(TcpSocket *socket);
 /* Frees allocated buffer in the tcp stream. */
 void freeTcpStream(TcpStream *stream);
 /* Waits for data to be available. */

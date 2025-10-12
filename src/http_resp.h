@@ -77,10 +77,10 @@ typedef enum HttpStatus {
 } HttpStatus;
 
 typedef struct HttpResp {
-    char *version;
+    const char *version;
     HttpStatus status;
     HttpHeaders headers;
-    void *content;
+    const void *content;
     size_t contentLength;
     int isContentFile;
 } HttpResp;
@@ -92,9 +92,6 @@ typedef enum HttpMimeType
     CONTENT_UNKNOWN = -1,
 } HttpContentType;
 
-#define USE_DEFAULT_SERVER_HEADER_FLAG 1 << 0
-#define USE_NO_CONTENT_RESPONSE_FLAG 1 << 1
-
 typedef struct HttpRespBuilder {
     HttpResp resp;
     int headersCapacity;
@@ -103,22 +100,25 @@ typedef struct HttpRespBuilder {
 
 const char *statusToStr(HttpStatus status);
 HttpStatus strnToStatus(const char *str, int n);
-int respToStr(HttpResp resp, char *str, int size);
-int buildRespStringFirstLineStr(HttpResp *resp, char *str, int size);
-int buildRespStringUntilContent(HttpResp *resp, char *str, int size);
+size_t buildRespStringFirstLineStr(HttpResp *resp, char *str, size_t size);
+size_t buildRespStringUntilContent(HttpResp *resp, char *str, size_t size);
 int respEq(HttpResp obj1, HttpResp obj2);
 void freeResp(HttpResp *resp);
 
 HttpResp newResp(HttpStatus status);
 HttpRespBuilder newRespBuilder();
 void respBuilderSetStatus(HttpRespBuilder *builder, HttpStatus status);
-void respBuilderSetVersion(HttpRespBuilder *builder, const char *version);
+/* set shouldCopy to true if the string should be copied to allocated memory */
+void respBuilderSetVersion(HttpRespBuilder *builder, const char *version, int shouldCopy);
 void respBuilderAddHeader(HttpRespBuilder *builder, char *key, char *value);
-void respBuilderSetContent(HttpRespBuilder *builder, void *content, size_t contentLength);
-void respBuilderSetFileContent(HttpRespBuilder *builder, const char *path);
+void respBuilderSetContent(HttpRespBuilder *builder, const void *content, size_t contentLength, int shouldCopy);
+/* set shouldCopy to true if the path should be copied to allocated memory */
+void respBuilderSetFileContent(HttpRespBuilder *builder, const char *path, int shouldCopy);
 #define SET_FLAGS 0
 #define UNSET_FLAGS 1
 #define REPLACE_FLAGS 2
+#define USE_DEFAULT_SERVER_HEADER_FLAG 1 << 0
+#define USE_NO_CONTENT_RESPONSE_FLAG 1 << 1
 void respBuilderSetFlags(HttpRespBuilder *builder, unsigned int flags, int behaviour);
 void respBuilderSetDefaultFlags(unsigned int flags);
 HttpResp respBuild(HttpRespBuilder *builder);
