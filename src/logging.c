@@ -2,8 +2,8 @@
 // Created by Crucerescu Vladislav on 13.08.2025.
 //
 
-#include "logging.h"
-#include "utils.h"
+#include "../includes/logging.h"
+#include "../includes/utils.h"
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>

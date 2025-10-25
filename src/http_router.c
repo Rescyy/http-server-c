@@ -2,9 +2,9 @@
 // Created by Crucerescu Vladislav on 07.03.2025.
 //
 
-#include "http_router.h"
-#include "http_resp.h"
-#include "alloc.h"
+#include "../includes/http_router.h"
+#include "../includes/http_resp.h"
+#include "../includes/alloc.h"
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>

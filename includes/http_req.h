@@ -34,7 +34,7 @@ typedef struct HttpReq {
     char *version;
     HttpHeaders headers;
     void *content;
-    int contentLength;
+    long contentLength;
     SessionState *appState;
     void *raw;
     size_t rawLength;
@@ -46,7 +46,6 @@ const char *methodToStr(HttpMethod method);
 HttpMethod strnToMethod(const char *str, int n);
 int parsePath(HttpPath *path, const char *str, int n);
 void freePath(HttpPath *path);
-int pathEq(HttpPath obj1, HttpPath obj2);
 int pathMatches(HttpPath endpointPath, HttpPath reqPath);
 int reqEq(HttpReq obj1, HttpReq obj2);
 void freeReq(HttpReq *req);

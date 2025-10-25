@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
-#include "alloc.h"
+#include "../includes/alloc.h"
 
 // Macro to define array type
 #define ARRAY_T(type) type##_array_t

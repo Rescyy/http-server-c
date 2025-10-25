@@ -2,7 +2,7 @@
 // Created by Rescyy on 9/28/2025.
 //
 
-#include "errors.h"
+#include "../includes/errors.h"
 
 const char* errToStr(int error) {
     switch (error) {

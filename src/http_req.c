@@ -6,16 +6,17 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <errno.h>
 
-#include "alloc.h"
-#include "errors.h"
-#include "http_req.h"
-#include "utils.h"
-#include "tcp_stream.h"
-#include "errors.h"
-#include "logging.h"
+#include "../includes/alloc.h"
+#include "../includes/errors.h"
+#include "../includes/http_req.h"
+#include "../includes/utils.h"
+#include "../includes/tcp_stream.h"
+#include "../includes/errors.h"
+#include "../includes/logging.h"
 
-int findContentLength(HttpHeaders headers);
+long findContentLength(HttpHeaders *headers);
 
 HttpReq newRequest()
 {
@@ -106,7 +107,7 @@ int parseRequestStream(HttpReq *req, TcpStream *stream)
     /* Fetch content */
     {
         debug("Parsing Content");
-        req->contentLength = findContentLength(req->headers);
+        req->contentLength = findContentLength(&req->headers);
         if (req->contentLength > 0)
         {
             req->content = tcpStreamReadSlice(stream, req->contentLength);
@@ -118,9 +119,13 @@ int parseRequestStream(HttpReq *req, TcpStream *stream)
                 return stream->error;
             }
         }
-        else
+        else if (req->contentLength == 0)
         {
             req->content = NULL;
+        }
+        else
+        {
+            return BAD_REQUEST_ERROR;
         }
     }
 
@@ -130,18 +135,18 @@ int parseRequestStream(HttpReq *req, TcpStream *stream)
     return 0;
 }
 
-int findContentLength(HttpHeaders headers)
+long findContentLength(HttpHeaders *headers)
 {
-    for (int i = 0; i < headers.count; i++)
-    {
-        if (strcasecmp(headers.arr[i].key, "Content-Length") == 0)
-        {
-            int contentLength = atoi(headers.arr[i].value);
-            return contentLength;
-        }
+    HttpHeader *contentLengthHeader = findHeader(headers, "Content-Length");
+    if (contentLengthHeader == NULL) {
+        return 0;
+    }
+    long contentLength = strtol(contentLengthHeader->value.ptr, NULL, 10);
+    if (errno == ERANGE || contentLength < 0) {
+        return -1;
     }
 
-    return 0;
+    return contentLength;
 }
 
 const char *methodToStr(HttpMethod method)
@@ -246,24 +251,6 @@ int parsePath(HttpPath *path, const char *str, int n)
     return 0;
 }
 
-int pathEq(HttpPath obj1, HttpPath obj2)
-{
-    if (obj1.elCount != obj2.elCount)
-    {
-        return 0;
-    }
-
-    for (int i = 0; i < obj1.elCount; i++)
-    {
-        if (strcmp(obj1.elements[i], obj2.elements[i]) != 0)
-        {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
 /*
     Matches path to endpoint path of form
     /object/<str>/<int> to match /object/hi/123
@@ -296,49 +283,11 @@ int pathMatches(HttpPath endpointPath, HttpPath reqPath)
     return 1;
 }
 
-int reqEq(HttpReq obj1, HttpReq obj2)
-{ /*miau*/
-    if (obj1.method != obj2.method)
-    {
-        return 0;
-    }
-
-    if (!pathEq(obj1.path, obj2.path))
-    {
-        return 0;
-    }
-
-    if (strcmp(obj1.version, obj2.version) != 0)
-    {
-        return 0;
-    }
-
-    if (!headersEq(obj1.headers, obj2.headers))
-    {
-        return 0;
-    }
-
-    if (obj1.contentLength != obj2.contentLength)
-    {
-        return 0;
-    }
-
-    if (obj1.contentLength == 0 && obj2.contentLength == 0)
-    {
-        return 1;
-    }
-
-    if (obj1.content == NULL || obj2.content == NULL || memcmp(obj1.content, obj2.content, obj1.contentLength) != 0)
-    {
-        return 0;
-    }
-
-    return 1;
-}
+/*miau*/
 
 int isConnectionKeepAlive(HttpReq *req)
 {
-    HttpHeader *header = findHeader(req->headers, "Connection");
+    HttpHeader *header = findHeader(&req->headers, "Connection");
     if (header == NULL)
     {
         if (getVersionNumber(req->version, 8) >= 11)
@@ -347,7 +296,7 @@ int isConnectionKeepAlive(HttpReq *req)
         }
         return 0;
     }
-    return strcasecmp(header->value, "keep-alive") == 0;
+    return strcasecmp(header->value.ptr, "keep-alive") == 0;
 }
 
 JObject httpReqToJObject(HttpReq *req) {
@@ -365,7 +314,7 @@ JObject httpReqToJObject(HttpReq *req) {
     };
     HttpHeader *headers = req->headers.arr;
     for (int i = 0; i < req->headers.count; i++) {
-        headersObj.properties[i] = _JProperty(headers[i].key, toJToken_cstring(headers[i].value));
+        headersObj.properties[i] = _JProperty(headers[i].key.ptr, toJToken_cstring(headers[i].value.ptr));
     }
 
     JToken contentToken;

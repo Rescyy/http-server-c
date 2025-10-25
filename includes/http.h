@@ -6,10 +6,11 @@
 #define HTTP_H
 
 #include "tcp_stream.h"
+#include "utils.h"
 
 typedef struct HttpHeader {
-    char *key;
-    char *value;
+    string key;
+    string value;
 } HttpHeader;
 
 typedef struct HttpHeaders {
@@ -20,9 +21,7 @@ typedef struct HttpHeaders {
 int parseHeadersStream(HttpHeaders *headers, TcpStream *stream);
 int isVersionValid(const char *str, int n);
 int getVersionNumber(const char *str, int n);
-int headerEq(HttpHeader obj1, HttpHeader obj2);
-int headersEq(HttpHeaders obj1, HttpHeaders obj2);
-HttpHeader *findHeader(HttpHeaders headers, const char *key);
+HttpHeader *findHeader(HttpHeaders *headers, const char *key);
 HttpHeaders emptyHeaders();
 
 #endif //HTTP_H

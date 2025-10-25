@@ -2,10 +2,10 @@
 // Created by Crucerescu Vladislav on 07.03.2025.
 //
 
-#include "http_resp.h"
-#include "file_handler.h"
-#include "alloc.h"
-#include "utils.h"
+#include "../includes/http_resp.h"
+#include "../includes/file_handler.h"
+#include "../includes/alloc.h"
+#include "../includes/utils.h"
 
 #include <string.h>
 #include <stdbool.h>
@@ -15,7 +15,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-#include "logging.h"
+#include "../includes/logging.h"
 
 const char *statusToStr(HttpStatus status)
 {
@@ -249,15 +249,17 @@ size_t buildRespStringFirstLineStr(HttpResp *resp, char *str, size_t size)
 }
 
 /* returns size of string */
-size_t buildRespStringUntilContent(HttpResp *resp, char *str, size_t size)
+size_t buildRespStringUntilContent(HttpResp *resp, char **str)
 {
-    size_t bytes = 0;
-    bytes += buildRespStringFirstLineStr(resp, str, size);
+    ARRAY_T(char) buf = ARRAY_WITH_CAPACITY(char, 1024);
+    size_t bytes = buildRespStringFirstLineStr(resp, buf.data, 1024);
     for (int i = 0; i < resp->headers.count; i++)
     {
-        bytes += snprintf(str + bytes, size - bytes, "%s: %s\r\n", resp->headers.arr[i].key, resp->headers.arr[i].value);
+        ARRAY_ENSURE_CAPACITY(char, &buf, buf.length + resp->headers.arr[i].key.length + resp->headers.arr[i].value.length + 4 + 2);
+        bytes += sprintf(buf.data + bytes, "%s: %s\r\n", resp->headers.arr[i].key.ptr, resp->headers.arr[i].value.ptr);
     }
-    bytes += snprintf(str + bytes, size - bytes, "\r\n");
+    bytes += sprintf(buf.data + bytes, "\r\n");
+    *str = buf.data;
     return bytes;
 }
 
@@ -279,47 +281,45 @@ void respBuilderSetStatus(HttpRespBuilder *builder, HttpStatus status)
 
 void verifyHeader(HttpHeader header)
 {
-    if (header.key == NULL || header.key[0] == '\0')
+    if (header.key.length == 0 || header.key.ptr == NULL || header.key.ptr[0] == '\0')
     {
-        fprintf(stderr, "Header key is NULL\n");
+        fprintf(stderr, "Code Error: Header key is NULL or EMPTY\n");
         exit(1);
     }
-    if (header.value == NULL || header.value[0] == '\0')
+    if (header.value.length == 0 || header.value.ptr == NULL || header.value.ptr[0] == '\0')
     {
-        fprintf(stderr, "Header value is NULL\n");
+        fprintf(stderr, "Code Error: Header value is NULL or EMPTY\n");
         exit(1);
     }
-    for (int i = 0; header.key[i] != '\0'; i++)
+    if (header.key.length > HEADER_KEY_SIZE_LIMIT) {
+        fprintf(stderr, "Header key exceeds HEADER_KEY_SIZE_LIMIT=%d.\n", HEADER_KEY_SIZE_LIMIT);
+        exit(1);
+    }
+    if (header.value.length > HEADER_VALUE_SIZE_LIMIT) {
+        fprintf(stderr, "Header value exceeds HEADER_VALUE_SIZE_LIMIT=%d.\n", HEADER_VALUE_SIZE_LIMIT);
+        exit(1);
+    }
+    for (int i = 0; i < header.key.length; i++)
     {
-        char c = header.key[i];
+        char c = header.key.ptr[i];
         if (!isAlpha(c) && c != '-')
         {
             fprintf(stderr, "Header key contains non-alphabetic characters\n");
             exit(1);
         }
-        if (i >= HEADER_KEY_SIZE_LIMIT)
-        {
-            fprintf(stderr, "Header key exceeds HEADER_KEY_SIZE_LIMIT=%d.\n", HEADER_KEY_SIZE_LIMIT);
-            exit(1);
-        }
     }
-    for (int i = 0; header.value[i] != '\0'; i++)
+    for (int i = 0; i < header.value.length; i++)
     {
-        char c = header.value[i];
+        char c = header.value.ptr[i];
         if (c == '\r' || c == '\n' || c < 32)
         {
             fprintf(stderr, "Header value contains invalid characters\n");
             exit(1);
         }
-        if (i >= HEADER_VALUE_SIZE_LIMIT)
-        {
-            fprintf(stderr, "Header value exceeds HEADER_VALUE_SIZE_LIMIT=%d.\n", HEADER_VALUE_SIZE_LIMIT);
-            exit(1);
-        }
     }
 
 #define CANT_HAVE_HEADER(string)                                                  \
-    if (strcasecmp(string, header.key) == 0)                                      \
+    if (strcasecmp(string, header.key.ptr) == 0)                                  \
     {                                                                             \
         fprintf(stderr, "Header key " string " is reserved and cannot be set\n"); \
         exit(1);                                                                  \
@@ -334,12 +334,8 @@ void addHeader(HttpRespBuilder *builder, const char *key, const char *value)
 {
     HttpHeaders *headers = &builder->resp.headers;
 
-    for (int i = 0; i < headers->count; i++)
-    {
-        if (strcasecmp(headers->arr[i].key, key) == 0)
-        {
-            return;
-        }
+    if (findHeader(headers, key) != NULL) {
+        return;
     }
 
     int *capacity = &builder->headersCapacity;
@@ -354,10 +350,18 @@ void addHeader(HttpRespBuilder *builder, const char *key, const char *value)
         headers->arr = gcReallocate(headers->arr, sizeof(HttpHeader) * (*capacity));
     }
 
-    char *keyCopy = gcArenaAllocate(strlen(key) + 1, alignof(char));
-    strcpy(keyCopy, key);
-    char *valueCopy = gcArenaAllocate(strlen(value) + 1, alignof(char));
-    strcpy(valueCopy, value);
+    string keyCopy = {
+        .ptr = gcArenaAllocate(strlen(key) + 1, alignof(char)),
+        .length = strlen(key)
+    };
+    strcpy(keyCopy.ptr, key);
+
+    string valueCopy = {
+        .ptr = gcArenaAllocate(strlen(value) + 1, alignof(char)),
+        .length = strlen(value)
+    };
+    strcpy(valueCopy.ptr, value);
+
     HttpHeader header = {keyCopy, valueCopy};
 
     headers->arr[headers->count++] = header;
@@ -365,14 +369,17 @@ void addHeader(HttpRespBuilder *builder, const char *key, const char *value)
 
 void respBuilderAddHeader(HttpRespBuilder *builder, char *key, char *value)
 {
-    verifyHeader((HttpHeader){key, value});
+    string keyString = {.ptr = key, .length = strlen(key)};
+    string valueString = {.ptr = value, .length = strlen(value)};
 
-    char *keyCopy = gcArenaAllocate(strlen(key) + 1, alignof(char));
-    strcpy(keyCopy, key);
-    char *valueCopy = gcArenaAllocate(strlen(value) + 1, alignof(char));
-    strcpy(valueCopy, value);
+    verifyHeader((HttpHeader){keyString, valueString});
+
+    string keyCopy = copyString(keyString);
+    string valueCopy = copyString(valueString);
     HttpHeader header = {keyCopy, valueCopy};
+
     HttpHeaders *headers = &builder->resp.headers;
+
     int *capacity = &builder->headersCapacity;
     if (headers->count == 0)
     {
@@ -494,7 +501,6 @@ HttpResp respBuild(HttpRespBuilder *builder)
         addHeader(builder, "Server", "http-server-c");
     }
     setRespStatus(builder);
-    debug("Response content length [%zu] file [%d]", builder->resp.contentLength, builder->resp.isContentFile);
     return builder->resp;
 }
 
@@ -517,29 +523,4 @@ HttpRespBuilder newRespBuilder() {
 
 void respBuilderSetDefaultFlags(const unsigned int flags) {
     defaultRespBuilderFlags = flags;
-}
-
-int respEq(HttpResp obj1, HttpResp obj2)
-{
-    if (strcmp(obj1.version, obj2.version) != 0)
-    {
-        return 0;
-    }
-    if (obj1.status != obj2.status)
-    {
-        return 0;
-    }
-    if (!headersEq(obj1.headers, obj2.headers))
-    {
-        return 0;
-    }
-    if (obj1.contentLength != obj2.contentLength)
-    {
-        return 0;
-    }
-    if (memcmp(obj1.content, obj2.content, obj1.contentLength) != 0)
-    {
-        return 0;
-    }
-    return 1;
 }

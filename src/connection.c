@@ -2,22 +2,21 @@
 // Created by Crucerescu Vladislav on 07.03.2025.
 //
 
-#include "connection.h"
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdio.h>
-#include <errno.h>
+#include <alloc.h>
 #include <assert.h>
+#include <connection.h>
+#include <errno.h>
+#include <logging.h>
+#include <netdb.h>
 #include <poll.h>
 #include <pthread.h>
-
-#include "alloc.h"
-#include "logging.h"
-#include "utils.h"
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <utils.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 /*
     return TcpSocket;
@@ -237,8 +236,9 @@ ReadResult receive(TcpSocket *sock, void *buffer, size_t size) {
     DECLARE_CURRENT_TIME(time);
     pthread_mutex_lock(&socketLogMutex);
     FILE *socketFile = fopen("socketLog.txt", "ab");
-    fprintf(socketFile, "\n%s Received %zd bytes\nbegin:\n", time, recvd);
+    fprintf(socketFile, "\n%s Received %zd bytes from %s\nbegin:\n", time, recvd, sock->ip);
     fwrite(buffer, 1, recvd, socketFile);
+    fprintf(socketFile, ":stop");
     fclose(socketFile);
     pthread_mutex_unlock(&socketLogMutex);
 
@@ -313,7 +313,7 @@ WriteResult transmit(TcpSocket *sock, const void *buffer, size_t size) {
         DECLARE_CURRENT_TIME(time);
         pthread_mutex_lock(&socketLogMutex);
         FILE *socketFile = fopen("socketLog.txt", "ab");
-        fprintf(socketFile, "\n%s Sent %zd bytes\nbegin:\n", time, sent);
+        fprintf(socketFile, "\n%s Sent %zd bytes to %s\nbegin:\n", time, sent, sock->ip);
         fwrite(buffer + totalSent, 1, sent, socketFile);
         fclose(socketFile);
         pthread_mutex_unlock(&socketLogMutex);

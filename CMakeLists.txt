@@ -8,7 +8,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -Wall -Wextra -pedantic -
 # Library with all your sources
 # ----------------------------
 add_library(httpserverc_lib
-        src/alloc.c
+        src/alloc/alloc.c
         src/connection.c
         src/http_req.c
         src/http_resp.c
@@ -21,20 +21,39 @@ add_library(httpserverc_lib
         src/logging.c
         src/file_handler.c
         src/json.c
-        src/result.h
         src/errors.c
+        src/alloc/garbage_collector.c
+        src/alloc/alloc_entries.c
+        src/alloc/arena.c
+        src/alloc/arena.h
+        src/alloc/destructors.c
+        src/alloc/destructors.h
 )
 
-target_include_directories(httpserverc_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# Include paths for the library
+target_include_directories(httpserverc_lib
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/includes  # headers moved here
+        PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 
 # ----------------------------
 # Main executable
 # ----------------------------
-add_executable(httpserverc main.c)
+add_executable(httpserverc main.c
+)
 target_link_libraries(httpserverc PRIVATE httpserverc_lib)
+
+# Include headers for main target too (CLion parses this)
+target_include_directories(httpserverc
+        PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/includes
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 
 # ----------------------------
 # Enable testing and add tests
 # ----------------------------
-#enable_testing()
-#add_subdirectory(tests)
+enable_testing()
+add_subdirectory(tests)

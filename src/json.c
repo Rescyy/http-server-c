@@ -2,8 +2,8 @@
 // Created by Crucerescu Vladislav on 17.08.2025.
 //
 
-#include "json.h"
-#include "alloc.h"
+#include "../includes/json.h"
+#include "../includes/alloc.h"
 
 #include <limits.h>
 #include <string.h>
@@ -11,7 +11,7 @@
 #include <stdarg.h>
 #include <errno.h>
 
-#include "logging.h"
+#include "../includes/logging.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 

@@ -2,11 +2,10 @@
 // Created by Crucerescu Vladislav on 13.08.2025.
 //
 
+#include <alloc.h>
+#include <app_state.h>
+#include <logging.h>
 #include <pthread.h>
-
-#include "app_state.h"
-#include "alloc.h"
-#include "logging.h"
 
 static int keyIsCreated = 0;
 static pthread_key_t sessionStateKey;

@@ -1,49 +1,13 @@
 //
 // Created by Crucerescu Vladislav on 17.08.2025.
 //
-#include "../src/json.h"
+#include <alloc.h>
+#include <json.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
-int __debug__ = 0;
-#define DEBUG                        \
-    printf("Debug %d\n", __debug__); \
-    __debug__++;                     \
-    fflush(stdout);
-
-#define EXPECT(x)                              \
-    if (!(x))                                  \
-    {                                          \
-        printf("LINE: %d %s\n", __LINE__, #x); \
-        testResult = 0;                        \
-    }
-
-#define INIT_UNIT_TESTS               \
-    int passed = 0, total = 0;        \
-    printf("\nRunning Tests...\n\n"); \
-    printf("------------------------------------------------------------------------------\n");
-#define TEST_RESULTS printf("\nTests passed %d/%d.\n\n", passed, total);
-
-#define UNIT_TEST(x)                                                                            \
-    printf("Running %s...\n\n", #x);                                                            \
-    int testResult##x = x();                                                                    \
-    passed += testResult##x;                                                                    \
-    total++;                                                                                    \
-    if (testResult##x)                                                                          \
-    {                                                                                           \
-        printf("\nPassed\n");                                                                   \
-    }                                                                                           \
-    else                                                                                        \
-    {                                                                                           \
-        printf("\nFailed\n");                                                                   \
-    }                                                                                           \
-    printf("------------------------------------------------------------------------------\n"); \
-    fflush(stdout);
-
-#define FREE(x) \
-    free(x);    \
-    x = NULL;
+#include "test.h"
 
 int test1()
 {
@@ -52,11 +16,10 @@ int test1()
     JToken element = _JNull();
     char *buffer;
 
-    int size = serializeJson(element, &buffer, 0);
+    size_t size = serializeJson(element, &buffer, 0);
     EXPECT(size == 4);
     EXPECT(strncmp(buffer, "null", 4) == 0);
-
-    FREE(buffer);
+    
     return testResult;
 }
 
@@ -64,14 +27,14 @@ int test2()
 {
     int testResult = 1;
 
-    JToken element = _JToken(true);
+    JToken element = toJToken_bool(true);
     char *buffer;
 
-    int size = serializeJson(element, &buffer, 0);
+    size_t size = serializeJson(element, &buffer, 0);
     EXPECT(size == 4);
     EXPECT(strncmp(buffer, "true", 4) == 0);
 
-    FREE(buffer);
+    
     return testResult;
 }
 
@@ -79,15 +42,13 @@ int test3()
 {
     int testResult = 1;
 
-    JToken element = _JToken(false);
+    JToken element = toJToken_bool(false);
     char *buffer;
 
-    int size = serializeJson(element, &buffer, 0);
+    size_t size = serializeJson(element, &buffer, 0);
     EXPECT(size == 5);
-    printf("buffer: %s\n", buffer);
     EXPECT(strncmp(buffer, "false", 5) == 0);
 
-    FREE(buffer);
     return testResult;
 }
 
@@ -95,15 +56,15 @@ int test4()
 {
     int testResult = 1;
 
-    int expectedSize = strlen("Hello, World!") + 2;
-    JToken element = _JToken("Hello, World!");
+    size_t expectedSize = strlen("Hello, World!") + 2;
+    JToken element = toJToken_cstring("Hello, World!");
 
     char *buffer;
 
-    int size = serializeJson(element, &buffer, 0);
+    size_t size = serializeJson(element, &buffer, 0);
     EXPECT(size == expectedSize);
     EXPECT(strncmp(buffer, "\"Hello, World!\"", expectedSize) == 0);
-    FREE(buffer);
+    
     return testResult;
 }
 
@@ -111,13 +72,13 @@ int test5()
 {
     int testResult = 1;
 
-    JToken element = _JToken(3.14);
+    JToken element = toJToken_double(3.14);
     char *buffer;
 
-    int size = serializeJson(element, &buffer, 0);
+    size_t size = serializeJson(element, &buffer, 0);
     EXPECT(size == 4);
     EXPECT(strncmp(buffer, "3.14", 4) == 0);
-    FREE(buffer);
+    
     return testResult;
 }
 
@@ -125,13 +86,13 @@ int test6()
 {
     int testResult = 1;
 
-    JToken element = _JToken(0.3515);
+    JToken element = toJToken_double(0.3515);
     char *buffer;
 
-    int size = serializeJson(element, &buffer, 0);
+    size_t size = serializeJson(element, &buffer, 0);
     EXPECT(size == 6);
     EXPECT(strncmp(buffer, "0.3515", 6) == 0);
-    FREE(buffer);
+    
     return testResult;
 }
 
@@ -139,13 +100,13 @@ int test7()
 {
     int testResult = 1;
 
-    JToken element = _JToken(0.123456789);
+    JToken element = toJToken_double(0.123456789);
     char *buffer;
 
-    int size = serializeJson(element, &buffer, 0);
+    size_t size = serializeJson(element, &buffer, 0);
     EXPECT(size == 8);
     EXPECT(strncmp(buffer, "0.123457", 8) == 0);
-    FREE(buffer);
+    
     return testResult;
 }
 
@@ -153,12 +114,12 @@ int test8()
 {
     int testResult = 1;
 
-    JToken element = _JToken(12);
+    JToken element = toJToken_int(12);
     char *buffer;
-    int size = serializeJson(element, &buffer, 0);
+    size_t size = serializeJson(element, &buffer, 0);
     EXPECT(size == 2);
     EXPECT(strncmp(buffer, "12", 2) == 0);
-    FREE(buffer);
+    
     return testResult;
 }
 
@@ -166,12 +127,12 @@ int test9()
 {
     int testResult = 1;
 
-    JToken element = _JToken(9.234e20);
+    JToken element = toJToken_double(9.234e20);
     char *buffer;
-    int size = serializeJson(element, &buffer, 0);
+    size_t size = serializeJson(element, &buffer, 0);
     EXPECT(size == 9);
     EXPECT(strncmp(buffer, "9.234e+20", 9) == 0);
-    FREE(buffer);
+    
     return testResult;
 }
 
@@ -179,12 +140,12 @@ int test10()
 {
     int testResult = 1;
 
-    JToken element = _JToken(0.0000001);
+    JToken element = toJToken_double(0.0000001);
     char *buffer;
-    int size = serializeJson(element, &buffer, 0);
+    size_t size = serializeJson(element, &buffer, 0);
     EXPECT(size == 5);
     EXPECT(strncmp(buffer, "1e-07", 5) == 0);
-    FREE(buffer);
+    
     return testResult;
 }
 
@@ -192,13 +153,13 @@ int test11()
 {
     int testResult = 1;
 
-    JToken elementArray = _JToken(_JList(_JToken(1)));
+    JToken elementArray = toJToken_JList(_JList(toJToken_int(1)));
 
     char *buffer;
-    int size = serializeJson(elementArray, &buffer, 0);
+    size_t size = serializeJson(elementArray, &buffer, 0);
     EXPECT(size == 3);
     EXPECT(strncmp(buffer, "[1]", 3) == 0);
-    FREE(buffer);
+    
     return testResult;
 }
 
@@ -206,13 +167,13 @@ int test12()
 {
     int testResult = 1;
 
-    JToken elementArray = _JToken(_JListEmpty());
+    JToken elementArray = toJToken_JList(_JListEmpty());
 
     char *buffer;
-    int size = serializeJson(elementArray, &buffer, 0);
+    size_t size = serializeJson(elementArray, &buffer, 0);
     EXPECT(size == 2);
     EXPECT(strncmp(buffer, "[]", 2) == 0);
-    FREE(buffer);
+    
     return testResult;
 }
 
@@ -220,32 +181,30 @@ int test13()
 {
     int testResult = 1;
 
-    JToken elementArray = _JToken(_JList(_JToken(_JListEmpty())));
+    JToken elementArray = toJToken_JList(_JList(toJToken_JList(_JListEmpty())));
 
     char *buffer;
-    int size = serializeJson(elementArray, &buffer, 0);
+    size_t size = serializeJson(elementArray, &buffer, 0);
     EXPECT(size == 4);
     EXPECT(strncmp(buffer, "[[]]", 4) == 0);
-    FREE(buffer);
+    
     return testResult;
 }
 
 int test14()
 {
     int testResult = 1;
-    JToken elementArray = _JToken(
+    JToken elementArray = toJToken_JList(
         _JList(
-            _JToken(1.0),
-            _JToken("Hello, World!")
+            toJToken_double(1.0),
+            toJToken_cstring("Hello, World!")
         )
     );
     char *buffer;
-    int size = serializeJson(elementArray, &buffer, 0);
+    size_t size = serializeJson(elementArray, &buffer, 0);
     EXPECT(size == 19);
-    printf("");
-    fflush(stdout);
     EXPECT(strncmp(buffer, "[1,\"Hello, World!\"]", 19) == 0);
-    FREE(buffer);
+    
     return testResult;
 }
 
@@ -253,19 +212,19 @@ int test15()
 {
     int testResult = 1;
 
-    JToken elementObject = _JToken(
+    JToken elementObject = toJToken_JObject(
         _JObject(
-            _JProperty("number", 1),
-            _JProperty("string", "Hello, World!")
+            _JProperty("number", toJToken_int(1)),
+            _JProperty("string", toJToken_cstring("Hello, World!"))
         )
     );
 
     char *buffer;
-    int size = serializeJson(elementObject, &buffer, 0);
+    size_t size = serializeJson(elementObject, &buffer, 0);
     char expectedString[] = "{\"number\":1,\"string\":\"Hello, World!\"}";
     EXPECT(size == strlen(expectedString));
     EXPECT(strncmp(buffer, expectedString, strlen(expectedString)) == 0);
-    FREE(buffer);
+    
     return testResult;
 }
 
@@ -273,41 +232,38 @@ int test16()
 {
     int testResult = 1;
 
-    JToken elementObject = _JToken(
-         _JObject(
-             _JProperty("number", 1),
-             _JProperty("string", "Hello, World!")
-         )
+    JToken elementObject = toJToken_JObject(
+        _JObject(
+            _JProperty("number", toJToken_int(1)),
+            _JProperty("string", toJToken_cstring("Hello, World!"))
+        )
     );
 
     char *buffer;
-    int size = serializeJson(elementObject, &buffer, 1);
+    size_t size = serializeJson(elementObject, &buffer, 1);
     char expectedString[] = "{\n \"number\": 1,\n \"string\": \"Hello, World!\"\n}";
     EXPECT(size == strlen(expectedString));
     EXPECT(strncmp(buffer, expectedString, strlen(expectedString)) == 0);
-    FREE(buffer);
+    
     return testResult;
 }
 
 int test17() {
     int testResult = 1;
 
-    JToken elementObject = _JToken(
+    JToken elementObject = toJToken_JObject(
         _JObject(
-            _JProperty("array0", _JListEmpty()),
-            _JProperty("array1", _JList(
-                _JToken("Hello")
-                )
-            )
+            _JProperty("array0", toJToken_JList(_JListEmpty())),
+            _JProperty("array1", toJToken_JList(_JList(toJToken_cstring("Hello"))))
         )
     );
 
     char *buffer;
-    int size = serializeJson(elementObject, &buffer, 2);
+    size_t size = serializeJson(elementObject, &buffer, 2);
     char expectedString[] = "{\n  \"array0\": [],\n  \"array1\": [\n    \"Hello\"\n  ]\n}";
     EXPECT(size == strlen(expectedString));
     EXPECT(strncmp(buffer, expectedString, strlen(expectedString)) == 0);
-    FREE(buffer);
+    
 
     return testResult;
 }
@@ -315,23 +271,23 @@ int test17() {
 int test18() {
     int testResult = 1;
 
-    JToken token = _JToken(
+    JToken token = toJToken_JList(
         _JList(
-            _JToken(_JObjectEmpty()),
-            _JToken(_JObjectEmpty()),
-            _JToken(_JList(
-                _JToken(_JObjectEmpty()),
-                _JToken(_JObjectEmpty())
+            toJToken_JObject(_JObjectEmpty()),
+            toJToken_JObject(_JObjectEmpty()),
+            toJToken_JList(_JList(
+                toJToken_JObject(_JObjectEmpty()),
+                toJToken_JObject(_JObjectEmpty())
             ))
         )
     );
 
     char *buffer;
-    int size = serializeJson(token, &buffer, 1);
+    size_t size = serializeJson(token, &buffer, 1);
     char expectedString[] = "[\n {},\n {},\n [\n  {},\n  {}\n ]\n]";
     EXPECT(size == strlen(expectedString));
     EXPECT(strncmp(buffer, expectedString, strlen(expectedString)) == 0);
-    FREE(buffer);
+    
 
     return testResult;
 }
@@ -339,24 +295,24 @@ int test18() {
 int test19() {
     int testResult = 1;
 
-    JToken token = _JToken(
+    JToken token = toJToken_JObject(
         _JObject(
-            _JProperty("1", _JListEmpty()),
-            _JProperty("2", _JListEmpty()),
-            _JProperty("3", _JObject(
-                _JProperty("1", _JListEmpty()),
-                _JProperty("2", _JListEmpty())
+            _JProperty("1", toJToken_JList(_JListEmpty())),
+            _JProperty("2", toJToken_JList(_JListEmpty())),
+            _JProperty("3", toJToken_JObject(_JObject(
+                _JProperty("1", toJToken_JList(_JListEmpty())),
+                _JProperty("2", toJToken_JList(_JListEmpty()))
                 )
-            )
+            ))
         )
     );
 
     char *buffer;
-    int size = serializeJson(token, &buffer, 1);
+    size_t size = serializeJson(token, &buffer, 1);
     char expectedString[] = "{\n \"1\": [],\n \"2\": [],\n \"3\": {\n  \"1\": [],\n  \"2\": []\n }\n}";
     EXPECT(size == strlen(expectedString));
     EXPECT(strncmp(buffer, expectedString, strlen(expectedString)) == 0);
-    FREE(buffer);
+    
 
     return testResult;
 }
@@ -364,14 +320,14 @@ int test19() {
 int test20() {
     int testResult = 1;
 
-    JToken token = _JToken("salut\"/\\\b\f\n\r\tpaca");
+    JToken token = toJToken_cstring("salut\"/\\\b\f\n\r\tpaca");
 
     char *buffer;
-    int size = serializeJson(token, &buffer, 1);
+    size_t size = serializeJson(token, &buffer, 1);
     char expectedString[] = "\"salut\\\"\\/\\\\\\b\\f\\n\\r\\tpaca\"";
     EXPECT(size == strlen(expectedString));
     EXPECT(strncmp(buffer, expectedString, strlen(expectedString)) == 0);
-    FREE(buffer);
+    
 
     return testResult;
 }
@@ -385,8 +341,6 @@ int test21() {
     EXPECT(token.ok);
     EXPECT(token.var.type == JSON_NULL);
 
-    freeJson(&token.var);
-
     return testResult;
 }
 
@@ -398,10 +352,8 @@ int test22() {
     EXPECT(token.ok);
     EXPECT(token.var.type == JSON_BOOLEAN);
     EXPECT(token.var.literal.boolean.value);
-    JToken expectedToken = _JToken(true);
+    JToken expectedToken = toJToken_bool(true);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
@@ -414,10 +366,8 @@ int test23() {
     EXPECT(token.ok);
     EXPECT(token.var.type == JSON_BOOLEAN);
     EXPECT(!token.var.literal.boolean.value);
-    JToken expectedToken = _JToken(false);
+    JToken expectedToken = toJToken_bool(false);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
@@ -427,11 +377,9 @@ int test24() {
 
     char numString[] = "123";
     RESULT_T(JToken) token = deserializeJson(numString, strlen(numString));
-    JToken expectedToken = _JToken(123);
+    JToken expectedToken = toJToken_int(123);
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
@@ -441,11 +389,9 @@ int test25() {
 
     char numString[] = "1.001";
     RESULT_T(JToken) token = deserializeJson(numString, strlen(numString));
-    JToken expectedToken = _JToken(1.001);
+    JToken expectedToken = toJToken_double(1.001);
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
@@ -455,11 +401,9 @@ int test26() {
 
     char numString[] = "-12345.6789";
     RESULT_T(JToken) token = deserializeJson(numString, strlen(numString));
-    JToken expectedToken = _JToken(-12345.6789);
+    JToken expectedToken = toJToken_double(-12345.6789);
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
@@ -469,11 +413,9 @@ int test27() {
 
     char numString[] = "4.68e20";
     RESULT_T(JToken) token = deserializeJson(numString, strlen(numString));
-    JToken expectedToken = _JToken(4.68e20);
+    JToken expectedToken = toJToken_double(4.68e20);
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
@@ -483,11 +425,9 @@ int test28() {
 
     char numString[] = "-0.023456789e-7";
     RESULT_T(JToken) token = deserializeJson(numString, strlen(numString));
-    JToken expectedToken = _JToken(-0.023456789e-7);
+    JToken expectedToken = toJToken_double(-0.023456789e-7);
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
@@ -497,11 +437,9 @@ int test29() {
 
     char cstring[] = "\"Hello world!\"";
     RESULT_T(JToken) token = deserializeJson(cstring, strlen(cstring));
-    JToken expectedToken = _JToken("Hello world!");
+    JToken expectedToken = toJToken_cstring("Hello world!");
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
@@ -511,11 +449,9 @@ int test30() {
 
     char cstring[] = "\"\\\\\\\"\\/\\n\\b\\t\\r\\f\"";
     RESULT_T(JToken) token = deserializeJson(cstring, strlen(cstring));
-    JToken expectedToken = _JToken("\\\"/\n\b\t\r\f");
+    JToken expectedToken = toJToken_cstring("\\\"/\n\b\t\r\f");
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
@@ -525,11 +461,9 @@ int test31() {
 
     char objectString[] = "{\n}";
     RESULT_T(JToken) token = deserializeJson(objectString, strlen(objectString));
-    JToken expectedToken = _JToken(_JObjectEmpty());
+    JToken expectedToken = toJToken_JObject(_JObjectEmpty());
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
@@ -539,11 +473,9 @@ int test32() {
 
     char cstring[] = "\"\"";
     RESULT_T(JToken) token = deserializeJson(cstring, strlen(cstring));
-    JToken expectedToken = _JToken(_JStringEmpty());
+    JToken expectedToken = toJToken_JString(_JStringEmpty());
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
@@ -553,15 +485,13 @@ int test33() {
 
     char objectString[] = "{\n\"salut\": \n\n\"paca\"   \n}";
     RESULT_T(JToken) token = deserializeJson(objectString, strlen(objectString));
-    JToken expectedToken = _JToken(
+    JToken expectedToken = toJToken_JObject(
         _JObject(
-            _JProperty("salut", "paca")
+            _JProperty("salut", toJToken_cstring("paca"))
         )
     );
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
@@ -571,15 +501,15 @@ int test34() {
 
     char objectString[] = "{\"null\": null, \"1\": 1, \"1.2\": 1.2, \"1.2e3\": 1.2e3, \"true\": true, \"false\": false, \"-0.1e23\": -0.1e23}";
     RESULT_T(JToken) token = deserializeJson(objectString, strlen(objectString));
-    JToken expectedToken = _JToken(
+    JToken expectedToken = toJToken_JObject(
         _JObject(
             _JProperty("null", _JNull()),
-            _JProperty("1.2e3", 1.2e3),
-            _JProperty("1.2", 1.2),
-            _JProperty("false", false),
-            _JProperty("1", 1),
-            _JProperty("true", true),
-            _JProperty("-0.1e23", -0.1e23)
+            _JProperty("1.2e3", toJToken_double(1.2e3)),
+            _JProperty("1.2", toJToken_double(1.2)),
+            _JProperty("false", toJToken_bool(false)),
+            _JProperty("1", toJToken_int(1)),
+            _JProperty("true", toJToken_bool(true)),
+            _JProperty("-0.1e23", toJToken_double(-0.1e23))
         )
     );
     char *result1;
@@ -589,8 +519,6 @@ int test34() {
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
 
-    freeJson(&token.var);
-
     return testResult;
 }
 
@@ -599,29 +527,27 @@ int test35() {
 
     char objectString[] = "\n \n\r\t\r [\"null\"\n, null\n, \"1\"  , {} \n\r\t , 1, \"1.2\" , 1.2, \"1.2e3\", 1.2e3, \"true\", true, \"false\"  \n , false, \"-0.1e23\", \n -0.1e23\n\n]\n  \n ";
     RESULT_T(JToken) token = deserializeJson(objectString, strlen(objectString));
-    JToken expectedToken = _JToken(
+    JToken expectedToken = toJToken_JList(
         _JList(
-            _JToken("null"),
+            toJToken_cstring("null"),
             _JNull(),
-            _JToken("1"),
-            _JToken(_JObjectEmpty()),
-            _JToken(1),
-            _JToken("1.2"),
-            _JToken(1.2),
-            _JToken("1.2e3"),
-            _JToken(1.2e3),
-            _JToken("true"),
-            _JToken(true),
-            _JToken("false"),
-            _JToken(false),
-            _JToken("-0.1e23"),
-            _JToken(-0.1e23)
+            toJToken_cstring("1"),
+            toJToken_JObject(_JObjectEmpty()),
+            toJToken_int(1),
+            toJToken_cstring("1.2"),
+            toJToken_double(1.2),
+            toJToken_cstring("1.2e3"),
+            toJToken_double(1.2e3),
+            toJToken_cstring("true"),
+            toJToken_bool(true),
+            toJToken_cstring("false"),
+            toJToken_bool(false),
+            toJToken_cstring("-0.1e23"),
+            toJToken_double(-0.1e23)
         )
     );
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
@@ -631,25 +557,22 @@ int test36() {
 
     char objectString[] = "{\n \"list\":[1, \"salut\", {\"paca\": false}\n ]\n }";
     RESULT_T(JToken) token = deserializeJson(objectString, strlen(objectString));
-    JToken expectedToken = _JToken(
+    JToken expectedToken = toJToken_JObject(
         _JObject(
             _JProperty("list",
-                _JList(
-                    _JToken(1),
-                    _JToken("salut"),
-                    _JToken(_JObject(
-                        _JProperty("paca", false)
+                toJToken_JList(_JList(
+                    toJToken_int(1),
+                    toJToken_cstring("salut"),
+                    toJToken_JObject(_JObject(
+                        _JProperty("paca", toJToken_bool(false))
                     ))
-                )
+                ))
             )
         )
     );
 
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
-
     return testResult;
 }
 
@@ -757,11 +680,9 @@ int test46() {
 
     char emptyListString[] = "[]";
     RESULT_T(JToken) token = deserializeJson(emptyListString, strlen(emptyListString));
-    JToken expectedToken = _JToken(_JListEmpty());
+    JToken expectedToken = toJToken_JList(_JListEmpty());
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
@@ -771,17 +692,18 @@ int test47() {
 
     char emptyObjectString[] = "{}";
     RESULT_T(JToken) token = deserializeJson(emptyObjectString, strlen(emptyObjectString));
-    JToken expectedToken = _JToken(_JObjectEmpty());
+    JToken expectedToken = toJToken_JObject(_JObjectEmpty());
     EXPECT(token.ok);
     EXPECT(equalsJson(&token.var, &expectedToken));
-
-    freeJson(&token.var);
 
     return testResult;
 }
 
 int main()
 {
+    gcInit();
+    gcTrack();
+
     INIT_UNIT_TESTS
     UNIT_TEST(test1)
     UNIT_TEST(test2)
@@ -831,5 +753,7 @@ int main()
     UNIT_TEST(test46)
     UNIT_TEST(test47)
     TEST_RESULTS
+
+    gcDestroy();
     return total - passed;
 }

@@ -5,7 +5,7 @@
 #ifndef APP_STATE_H
 #define APP_STATE_H
 #include "connection.h"
-#include "alloc.h"
+#include "../includes/alloc.h"
 
 typedef struct {
     TcpSocket clientSocket;

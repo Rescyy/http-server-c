@@ -2,32 +2,29 @@
 // Created by Crucerescu Vladislav on 07.03.2025.
 //
 
-#include <assert.h>
+#include <alloc.h>
+#include <app.h>
+#include <app_state.h>
+#include <connection.h>
+#include <errors.h>
+#include <fcntl.h>
+#include <fcntl.h>
+#include <http_router.h>
+#include <logging.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
-#include <string.h>
-#include <sys/socket.h>
 #include <stdlib.h>
-#include <fcntl.h>
+#include <string.h>
+#include <tcp_stream.h>
 #include <sys/sendfile.h>
-#include <fcntl.h>
-#include <errno.h>
-
-#include "alloc.h"
-#include "app.h"
-
-#include "app_state.h"
-#include "connection.h"
-#include "http_router.h"
-#include "logging.h"
-#include "tcp_stream.h"
+#include <sys/socket.h>
+#include <errno.h> // don't delete
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 static HttpRouter router = {.capacity = -1};
 static pthread_t mainThreadId;
-static int wasInitialised = 0;
 
 void *handleConnectionThreadCall(void *arg);
 void handleConnection(SessionState *appState);
@@ -42,6 +39,7 @@ pthread_t getMainThreadId() {
 }
 
 void initApp() {
+    static int wasInitialised = 0;
     if (wasInitialised) {
         return;
     }
@@ -54,9 +52,12 @@ void initApp() {
 }
 
 void segfault_handler(int sig, siginfo_t *info, void *ucontext) {
-    (void)ucontext; // unused
-    fprintf(stderr, "Segmentation fault at address: %p\n", info->si_addr);
-    _exit(1); // exit immediately, safe in signal handler
+    (void)ucontext;
+    printf("Segmentation fault at address: %p\n\n", info->si_addr);
+    fflush(stdout);
+    printf("Exiting...\n\n");
+    fflush(stdout);
+    _exit(1);
 }
 
 void setup_segfault_handler() {
@@ -231,18 +232,10 @@ int handleError(int result, TcpSocket *client, HttpReq *request) {
 }
 
 WriteResult sendResponse(HttpResp *resp, TcpSocket *client) {
-    char stackBuffer[BUFFER_SIZE];
-    char *responseBuffer = stackBuffer;
+    char *buffer;
+    size_t responseSize = buildRespStringUntilContent(resp, &buffer);
 
-    size_t responseSize = buildRespStringUntilContent(resp, stackBuffer, BUFFER_SIZE);
-
-    if (responseSize > BUFFER_SIZE) {
-        /* if stackBuffer not big enough */
-        responseBuffer = gcArenaAllocate(responseSize, alignof(char));
-        buildRespStringUntilContent(resp, responseBuffer, responseSize);
-    }
-
-    WriteResult respResult = transmit(client, responseBuffer, responseSize);
+    WriteResult respResult = transmit(client, buffer, responseSize);
 
     if (respResult.result != WRITE_OK) {
         return respResult;

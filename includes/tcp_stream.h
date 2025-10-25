@@ -6,7 +6,6 @@
 #define TCP_STREAM_H
 
 #include "utils.h"
-#include "errors.h"
 #include "connection.h"
 
 #define TCP_STREAM_BUFFER_SIZE 1024

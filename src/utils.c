@@ -2,8 +2,8 @@
 // Created by Crucerescu Vladislav on 07.03.2025.
 //
 
-#include "utils.h"
-#include "alloc.h"
+#include "../includes/utils.h"
+#include "../includes/alloc.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -128,4 +128,13 @@ size_t getCurrentFormattedTime(char *buf, size_t size) {
     formattedSize += snprintf(buf + formattedSize, size - formattedSize, ".%03ld", ts.tv_nsec / 1000000);
 
     return formattedSize;
+}
+
+string copyString(string str) {
+    void *ptr = gcArenaAllocate(str.length + 1, sizeof(char));
+    snprintf(ptr, str.length + 1, "%.*s", (int) str.length, str.ptr);
+    return (string) {
+        .ptr = ptr,
+        .length = str.length,
+    };
 }

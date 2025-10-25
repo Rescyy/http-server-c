@@ -2,15 +2,17 @@
 // Created by Crucerescu Vladislav on 07.03.2025.
 //
 
-#include "tcp_stream.h"
-#include "connection.h"
+#include "../includes/tcp_stream.h"
+#include "../includes/connection.h"
+#include "../includes/logging.h"
+#include "../includes/errors.h"
+
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
-#include "alloc.h"
+#include "../includes/alloc.h"
 #include <string.h>
 
-#include "logging.h"
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))

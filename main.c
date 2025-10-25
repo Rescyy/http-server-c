@@ -2,9 +2,9 @@
 #include <pthread.h>
 #include <unistd.h>
 
-#include "src/app.h"
-#include "src/alloc.h"
-#include "logging.h"
+#include "includes/app.h"
+#include "includes/alloc.h"
+#include "includes/logging.h"
 
 HttpResp helloH(HttpReq);
 HttpResp indexH(HttpReq);

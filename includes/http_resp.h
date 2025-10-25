@@ -7,7 +7,7 @@
 
 #include "http.h"
 
-#define HEADER_KEY_SIZE_LIMIT 64
+#define HEADER_KEY_SIZE_LIMIT 128
 #define HEADER_VALUE_SIZE_LIMIT 1024
 
 typedef enum HttpStatus {
@@ -100,10 +100,7 @@ typedef struct HttpRespBuilder {
 
 const char *statusToStr(HttpStatus status);
 HttpStatus strnToStatus(const char *str, int n);
-size_t buildRespStringFirstLineStr(HttpResp *resp, char *str, size_t size);
-size_t buildRespStringUntilContent(HttpResp *resp, char *str, size_t size);
-int respEq(HttpResp obj1, HttpResp obj2);
-void freeResp(HttpResp *resp);
+size_t buildRespStringUntilContent(HttpResp *resp, char **str);
 
 HttpResp newResp(HttpStatus status);
 HttpRespBuilder newRespBuilder();

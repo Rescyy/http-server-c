@@ -2,11 +2,10 @@
 // Created by Crucerescu Vladislav on 07.03.2025.
 //
 
-#include "http.h"
+#include <http.h>
 #include <string.h>
-#include <stdio.h>
-#include "alloc.h"
-#include "utils.h"
+#include <alloc.h>
+#include <utils.h>
 
 #define INITIAL_HEADER_CAP 8
 #define MAX_HEADER_SIZE 8192
@@ -40,37 +39,12 @@ int parseHeadersStream(HttpHeaders *headers, TcpStream *stream)
             headerCap *= 2;
             headers->arr = gcReallocate(headers->arr, headerCap * sizeof(HttpHeader));
         }
-        headers->arr[headers->count].key = gcArenaAllocate(headerKey.length + 1, alignof(char));
-        headers->arr[headers->count].value = gcArenaAllocate(headerValue.length + 1, alignof(char));
-        snprintf(headers->arr[headers->count].key, headerKey.length + 1, "%.*s", (int) headerKey.length, headerKey.ptr);
-        snprintf(headers->arr[headers->count].value, headerValue.length + 1, "%.*s", (int) headerValue.length, headerValue.ptr);
+        headers->arr[headers->count].key = copyString(headerKey);
+        headers->arr[headers->count].value = copyString(headerValue);
         headers->count++;
     }
     stream->cursor += 2;
     return 0;
-}
-
-int headerEq(HttpHeader obj1, HttpHeader obj2)
-{
-    return strcasecmp(obj1.key, obj2.key) == 0 && strcmp(obj1.value, obj2.value) == 0;
-}
-
-int headersEq(HttpHeaders obj1, HttpHeaders obj2)
-{
-    if (obj1.count != obj2.count)
-    {
-        return 0;
-    }
-    for (int i = 0; i < obj1.count; i++)
-    {
-        HttpHeader *header = findHeader(obj2, obj1.arr[i].key);
-
-        if (header == NULL || strcmp(header->value, obj1.arr[i].value) != 0)
-        {
-            return 0;
-        }
-    }
-    return 1;
 }
 
 int isVersionValid(const char *str, int n)
@@ -114,13 +88,13 @@ int getVersionNumber(const char *str, int n)
     return -1;
 }
 
-HttpHeader *findHeader(HttpHeaders headers, const char *key)
+HttpHeader *findHeader(HttpHeaders *headers, const char *key)
 {
-    for (int i = 0; i < headers.count; i++)
+    for (int i = 0; i < headers->count; i++)
     {
-        if (strcasecmp(headers.arr[i].key, key) == 0)
+        if (strcasecmp(headers->arr[i].key.ptr, key) == 0)
         {
-            return &headers.arr[i];
+            return &headers->arr[i];
         }
     }
     return NULL;

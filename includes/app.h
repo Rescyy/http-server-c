@@ -5,7 +5,8 @@
 #ifndef APP_H
 #define APP_H
 
-#include "http.h"
+#include <pthread.h>
+
 #include "http_req.h"
 #include "http_resp.h"
 
