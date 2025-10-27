@@ -34,7 +34,7 @@ void gcDestroy();
 
 // Allocates bytes from the arena, the received memory cannot be grown dynamically
 // The arena is tracked by the GC engine
-void *gcArenaAllocate(size_t size, int align);
+void *gcArenaAllocate(size_t size, unsigned int align);
 
 // Gives back some bytes from the previously allocated arena chunk.
 // The behaviour is undefined if it is called

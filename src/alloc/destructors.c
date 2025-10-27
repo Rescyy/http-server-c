@@ -47,7 +47,10 @@ void initDestructors() {
 }
 
 void deInitDestructors() {
-    invokeDestructors(getDestructors());
+    ARRAY_T(Destructor) *destructors = getDestructors();
+    if (destructors != NULL) {
+        invokeDestructors(destructors);
+    }
     pthread_key_delete(destructorsThreadKey);
 }
 

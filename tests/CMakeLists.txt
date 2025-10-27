@@ -15,3 +15,4 @@ endfunction()
 
 # Example test
 add_unit_test(json_test json_test.c)
+add_unit_test(alloc_test alloc_test.c)

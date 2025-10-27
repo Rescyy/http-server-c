@@ -5,6 +5,9 @@
 #ifndef HTTPSERVERC_TEST_H
 #define HTTPSERVERC_TEST_H
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 int debug_ = 0;
 #define DEBUG                        \
@@ -23,7 +26,7 @@ int debug_ = 0;
     int passed = 0, total = 0;        \
     printf("\nRunning Tests...\n\n"); \
     printf("------------------------------------------------------------------------------\n");
-#define TEST_RESULTS printf("\nTests passed %d/%d.\n\n", passed, total);
+#define TEST_RESULTS printf("\nTests passed %d/%d.\n\n", passed, total); int failed = total - passed;
 
 #define UNIT_TEST(x)                                                                            \
     printf("Running %s...\n\n", #x);                                                            \

@@ -64,3 +64,11 @@ void *chunkAlloc(ArenaChunk *chunk, size_t size, int align) {
     chunk->size += size;
     return returnPtr;
 }
+
+int chunkHasEnoughSpace(ArenaChunk *chunk, size_t size, int align) {
+    size_t chunkSize = chunk->size;
+    if (chunk->size % align != 0) {
+        chunkSize += align - chunk->size % align;
+    }
+    return chunkSize + size <= chunk->capacity;
+}

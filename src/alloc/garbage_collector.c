@@ -62,7 +62,10 @@ void gcCleanup() {
     cleanupArena(getArena());
 }
 
-void *gcArenaAllocate(const size_t size, int align) {
+void *gcArenaAllocate(const size_t size, unsigned int align) {
+    assert(align != 0);
+    if (size == 0) return NULL;
+
     Arena *arena = getArena();
     if (arena == NULL) {
         return allocate(size);
@@ -71,8 +74,8 @@ void *gcArenaAllocate(const size_t size, int align) {
     const int sizeInt = (int) size;
 
     if (size >= ARENA_PAGE_CAP) {
-        ArenaChunk *chunk = &arena->chunks.data[arena->chunks.length - 1];
-        if (chunk->capacity >= chunk->size + size) {
+        ArenaChunk *chunk = &arena->chunks.data[arena->lastSentFrom];
+        if (chunkHasEnoughSpace(chunk, size, align)) {
             return chunkAlloc(chunk, sizeInt, align);
         }
         ARRAY_PUSH(ArenaChunk, &arena->chunks, newArenaChunk(size));
@@ -85,7 +88,7 @@ void *gcArenaAllocate(const size_t size, int align) {
     void *returnPtr = NULL;
 
     for (unsigned int i = arena->openFrom; i < arena->chunks.length; i++) {
-        if (arena->chunks.data[i].capacity - arena->chunks.data[i].size >= size) {
+        if (chunkHasEnoughSpace(&arena->chunks.data[i], size, align)) {
             returnPtr = chunkAlloc(&arena->chunks.data[i], size, align);
             arena->lastSentFrom = i;
             break;
@@ -107,13 +110,24 @@ void *gcArenaAllocate(const size_t size, int align) {
     }
 
     if (arena->tries >= ARENA_MAX_TRIES) {
+        size_t used = 0;
+        size_t cap = 0;
+        for (unsigned int i = 0; i < arena->lastSentFrom; i++) {
+            used += arena->chunks.data[i].size;
+            cap += arena->chunks.data[i].capacity;
+        }
+
         arena->openFrom = arena->lastSentFrom;
+        arena->tries = 0;
     }
 
     return returnPtr;
 }
 
 void gcArenaGiveBack(size_t size) {
+    if (size == 0) {
+        return;
+    }
     Arena *arena = getArena();
     if (arena == NULL) {
         return;
@@ -139,6 +153,9 @@ void *gcAllocate(size_t size) {
 }
 
 void *gcReallocate(void *ptr, size_t size) {
+    if (ptr == NULL) {
+        return gcAllocate(size);
+    }
     void *newPtr = reallocate(ptr, size);
     AllocEntries *entries = getEntries();
     if (entries == NULL) {

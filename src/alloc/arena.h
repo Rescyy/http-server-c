@@ -34,5 +34,6 @@ Arena *getArena();
 void setArena(const Arena *arena);
 ArenaChunk newArenaChunk(size_t capacity);
 void *chunkAlloc(ArenaChunk *chunk, size_t size, int align);
+int chunkHasEnoughSpace(ArenaChunk *chunk, size_t, int align);
 
 #endif //HTTPSERVERC_PAGE_ARENAS_H

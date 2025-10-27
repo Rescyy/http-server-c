@@ -3,9 +3,6 @@
 //
 #include <alloc.h>
 #include <json.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include "test.h"
 
@@ -755,5 +752,5 @@ int main()
     TEST_RESULTS
 
     gcDestroy();
-    return total - passed;
+    return failed;
 }
