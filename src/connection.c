@@ -24,7 +24,7 @@
     error = -1: addrinfo error;
     error > 0: errno specific;
 */
-TcpSocket socketListen(port_t port)
+TcpSocket socketListen(const port_t port)
 {
     int status, sockfd;
     socklen_t addrSize = sizeof(struct sockaddr_storage);
@@ -129,7 +129,7 @@ TcpSocket acceptConnection(TcpSocket sock)
     error = -1: addrinfo error;
     error > 0: check errno;
 */
-TcpSocket socketConnect(char *host, port_t port)
+TcpSocket socketConnect(const char *host, const port_t port)
 {
     struct addrinfo hints, *res;
     int sockfd, status;

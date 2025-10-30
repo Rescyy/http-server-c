@@ -95,9 +95,9 @@ void startApp(char *port) {
     int connectionIndex = 1;
 
     for (;;) {
+        TcpSocket clientSocket = acceptConnection(socket);
         SessionState *state = newSessionState();
         state->connectionIndex = connectionIndex++;
-        TcpSocket clientSocket = acceptConnection(socket);
 
         info("Connection accepted from client %s", clientSocket.ip);
         if (clientSocket.closed) {

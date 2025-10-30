@@ -47,9 +47,9 @@ typedef struct ReadResult {
     size_t received;
 } ReadResult;
 
-TcpSocket socketListen(port_t port);
+TcpSocket socketListen(const port_t port);
 TcpSocket acceptConnection(TcpSocket socket);
-TcpSocket socketConnect(char *host, port_t port);
+TcpSocket socketConnect(const char *host, const port_t port);
 void closeSocket(TcpSocket *sock);
 ReadEnum canRead(int fd, int timeoutMs);
 ReadResult receive(TcpSocket *sock, void *buffer, size_t size);
