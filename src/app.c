@@ -96,15 +96,13 @@ void startApp(char *port) {
 
     for (;;) {
         TcpSocket clientSocket = acceptConnection(socket);
-        SessionState *state = newSessionState();
-        state->connectionIndex = connectionIndex++;
+        SessionState *state = newSessionState(clientSocket, connectionIndex++);
 
-        info("Connection accepted from client %s", clientSocket.ip);
+        info("Connection accepted from client %s with index %lu", clientSocket.ip, connectionIndex);
         if (clientSocket.closed) {
             error("Client connection error: %s", strerror(errno));
             deallocate(state);
         } else {
-            state->clientSocket = clientSocket;
             pthread_create(&thread1, NULL, handleConnectionThreadCall, state);
             pthread_detach(thread1);
         }

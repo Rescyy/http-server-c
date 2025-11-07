@@ -14,7 +14,7 @@ typedef struct {
 } SessionState;
 
 void initSessionStateFactory();
-SessionState *newSessionState();
+SessionState *newSessionState(TcpSocket socket, unsigned long connectionIndex);
 void setSessionState(SessionState *state);
 SessionState *getSessionState();
 

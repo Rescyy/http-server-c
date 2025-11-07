@@ -10,8 +10,10 @@
 static int keyIsCreated = 0;
 static pthread_key_t sessionStateKey;
 
-SessionState *newSessionState() {
+SessionState *newSessionState(TcpSocket socket, unsigned long connectionIndex) {
     SessionState *state = allocate(sizeof(SessionState));
+    state->clientSocket = socket;
+    state->connectionIndex = connectionIndex;
     state->requestIndex = 1;
     return state;
 }
