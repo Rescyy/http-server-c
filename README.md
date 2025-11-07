@@ -42,7 +42,7 @@ Output
 [DEBUG|2025-11-07 09:54:20.425|MAIN] Initialising Garbage Collector
 [INFO|2025-11-07 09:54:20.425|MAIN] Adding Endpoint /
 [INFO|2025-11-07 09:54:20.425|MAIN] Listening to port 8080
-[INFO|2025-11-07 09:54:37.331|MAIN] Connection accepted from client 172.17.0.1 with index 2
+[INFO|2025-11-07 09:54:37.331|MAIN] Connection accepted from client 172.17.0.1 with connection index 1
 [DEBUG|2025-11-07 09:54:37.332|1.1] Parsing Method
 [DEBUG|2025-11-07 09:54:37.332|1.1] poll({.fd = 4, .events = POLLIN}, 1, 60000) returned 1 and set .revents to 0001
 [DEBUG|2025-11-07 09:54:37.332|1.1] recv(4, 0x51900000ff80, 1024, 0) returned 727
