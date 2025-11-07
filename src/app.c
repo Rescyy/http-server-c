@@ -76,9 +76,8 @@ void startApp(char *port) {
 
     for (;;) {
         TcpSocket clientSocket = acceptConnection(socket);
+        info("Connection accepted from client %s with connection index %lu", clientSocket.ip, connectionIndex);
         SessionState *state = newSessionState(clientSocket, connectionIndex++);
-
-        info("Connection accepted from client %s with index %lu", clientSocket.ip, connectionIndex);
         if (clientSocket.closed) {
             error("Client connection error: %s", strerror(errno));
             deallocate(state);
