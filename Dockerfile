@@ -4,13 +4,15 @@
 FROM ubuntu:24.04 AS build
 LABEL authors="Rescyy"
 
-# Install build tools and ASan
+# Install build tools, AddressSanitizer, and liburing
 RUN apt-get update && apt-get install -y \
     cmake \
     gcc \
     g++ \
     make \
     libasan8 \
+    liburing-dev \
+    liburing2 \
     coreutils \
  && rm -rf /var/lib/apt/lists/*
 
@@ -34,8 +36,10 @@ RUN cd build && \
 # ============================
 FROM ubuntu:24.04
 
-# Install only runtime ASan dependency
-RUN apt-get update && apt-get install -y libasan8 \
+# Install runtime libraries: ASan + liburing
+RUN apt-get update && apt-get install -y \
+    libasan8 \
+    liburing2 \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

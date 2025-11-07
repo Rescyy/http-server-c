@@ -17,6 +17,7 @@
 #include "../includes/logging.h"
 
 long findContentLength(HttpHeaders *headers);
+static int parsePath(HttpPath *path, const char *str, int n);
 
 HttpReq newRequest()
 {
@@ -207,7 +208,7 @@ HttpMethod strnToMethod(const char *str, int n)
 #undef IS_METHOD
 }
 
-int parsePath(HttpPath *path, const char *str, int n)
+static int parsePath(HttpPath *path, const char *str, int n)
 {
     int offset, prevOffset = 0;
     path->elCount = 0;

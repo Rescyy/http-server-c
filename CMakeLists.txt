@@ -10,10 +10,10 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -Wall -Wextra -pedantic -
 add_library(httpserverc_lib
         src/alloc/alloc.c
         src/connection.c
-        src/http_req.c
-        src/http_resp.c
-        src/http_router.c
-        src/http.c
+        src/http/http_req.c
+        src/http/http_resp.c
+        src/http/http_router.c
+        src/http/http.c
         src/utils.c
         src/tcp_stream.c
         src/app.c
@@ -27,6 +27,14 @@ add_library(httpserverc_lib
         src/alloc/arena.c
         src/alloc/destructors.c
         src/helpers/signal_helper.c
+        src/iouring/async_producer.c
+        src/iouring/async_producer.h
+        src/iouring/async_consumer.c
+        src/iouring/async_consumer.h
+        src/iouring/async_engine.c
+        src/iouring/async_engine.h
+        src/http/http_parser.c
+        src/http/http_parser.h
 )
 
 # Include paths for the library
