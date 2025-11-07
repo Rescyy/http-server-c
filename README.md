@@ -1,7 +1,8 @@
 ﻿Simple HTTP Server library written in C
 
 ```git pull https://github.com/Rescyy/http-server-c.git
-cd http-server-c```
+cd http-server-c
+```
 
 Example main.c
 ```
