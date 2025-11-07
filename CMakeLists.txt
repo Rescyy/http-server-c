@@ -25,9 +25,8 @@ add_library(httpserverc_lib
         src/alloc/garbage_collector.c
         src/alloc/alloc_entries.c
         src/alloc/arena.c
-        src/alloc/arena.h
         src/alloc/destructors.c
-        src/alloc/destructors.h
+        src/helpers/signal_helper.c
 )
 
 # Include paths for the library
@@ -41,8 +40,8 @@ target_include_directories(httpserverc_lib
 # ----------------------------
 # Main executable
 # ----------------------------
-add_executable(httpserverc main.c
-)
+add_executable(httpserverc main.c)
+
 target_link_libraries(httpserverc PRIVATE httpserverc_lib)
 
 # Include headers for main target too (CLion parses this)

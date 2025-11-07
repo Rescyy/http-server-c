@@ -12,7 +12,6 @@
 #include <http_router.h>
 #include <logging.h>
 #include <pthread.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,6 +19,8 @@
 #include <sys/sendfile.h>
 #include <sys/socket.h>
 #include <errno.h> // don't delete
+
+#include "helpers/signal_helper.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
@@ -49,34 +50,13 @@ void initApp() {
     initSessionStateFactory();
     debug("Initialising Garbage Collector");
     gcInit();
+    setupSignalHandlers();
 }
 
-void segfault_handler(int sig, siginfo_t *info, void *ucontext) {
-    (void)ucontext;
-    printf("Segmentation fault at address: %p\n\n", info->si_addr);
-    fflush(stdout);
-    printf("Exiting...\n\n");
-    fflush(stdout);
-    _exit(1);
-}
 
-void setup_segfault_handler() {
-    struct sigaction sa;
-    sa.sa_sigaction = segfault_handler;
-    sa.sa_flags = SA_SIGINFO;
-    sigemptyset(&sa.sa_mask);
-    if (sigaction(SIGSEGV, &sa, NULL) == -1) {
-        perror("sigaction");
-        exit(1);
-    }
-}
 
 void startApp(char *port) {
     initApp();
-
-    setup_segfault_handler();
-
-    signal(SIGPIPE, SIG_IGN);
 
     if (router.capacity == -1) {
         router = emptyRouter();
