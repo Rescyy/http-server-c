@@ -6,7 +6,7 @@
 #define HTTPSERVERC_HTTP_PARSER_H
 
 #include "http_req.h"
-#include <stdlib.h>
+#include "array.h"
 
 typedef enum {
     INIT = 0,
@@ -19,11 +19,12 @@ typedef enum {
     DONE,
 
     INVALID_PROTOCOL = 100,
-    UNKNOWN_METHOD,
+    INVALID_METHOD,
     INVALID_PATH,
     INVALID_VERSION,
     INVALID_HEADER_KEY,
     INVALID_HEADER_VALUE,
+    INVALID_CONTENT_LENGTH,
 
     ENTITY_TOO_LONG = 200,
     METHOD_TOO_LONG,
@@ -34,15 +35,15 @@ typedef enum {
 
 } HttpReqParserState;
 
+DEFINE_ARRAY_H(HttpHeader)
+
 typedef struct {
     HttpReqParserState state;
     HttpMethod method;
     HttpPath path;
     char *version;
-    HttpHeaders headers;
-    int headersCapacity;
+    ARRAY_T(HttpHeader) headers;
     void *content;
-    size_t contentRead;
     size_t contentLength;
     char *errorMessage;
 } HttpReqParser;
