@@ -22,5 +22,6 @@ size_t getCurrentFormattedTime(char *buf, size_t size);
 string copyString(string str);
 
 #define DECLARE_CURRENT_TIME(time) char time[128]; getCurrentFormattedTime(time, sizeof(time))
+#define EMPTY_STRING (string) {.ptr = NULL, .length = 0}
 
 #endif

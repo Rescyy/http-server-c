@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
-#include "../includes/alloc.h"
+#include "alloc.h"
 
 // Macro to define array type
 #define ARRAY_T(type) type##_array_t
@@ -47,6 +47,9 @@ ARRAY_T(type) type##_array_new(void) { \
 \
 void type##_array_ensure_capacity(ARRAY_T(type) *arr, unsigned int new_cap) { \
     if (new_cap <= arr->capacity) {return;}\
+    if (arr->capacity == 0) {\
+        arr->capacity = 1;\
+    }\
     while (new_cap > arr->capacity) { \
         arr->capacity *= 2; \
     } \
