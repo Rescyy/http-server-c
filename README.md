@@ -32,7 +32,7 @@ int main() {
 ```
 
 Build:
-`docker builder -t httpserverc .`
+`docker build -t httpserverc .`
 
 Run: 
 `docker run -it -p 8080:8080 httpserverc`

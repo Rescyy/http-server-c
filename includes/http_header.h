@@ -8,6 +8,7 @@
 #include "tcp_stream.h"
 #include "utils.h"
 
+/* copy of KeyValue */
 typedef struct HttpHeader {
     string key;
     string value;
@@ -19,8 +20,6 @@ typedef struct HttpHeaders {
 } HttpHeaders;
 
 int parseHeadersStream(HttpHeaders *headers, TcpStream *stream);
-int isVersionValid(const char *str, int n);
-int getVersionNumber(const char *str, int n);
 HttpHeader *findHeader(HttpHeaders *headers, const char *key);
 HttpHeaders emptyHeaders();
 

@@ -5,7 +5,7 @@
 #ifndef HTTP_RESP_H
 #define HTTP_RESP_H
 
-#include "http.h"
+#include "http_header.h"
 
 #define HEADER_KEY_SIZE_LIMIT 128
 #define HEADER_VALUE_SIZE_LIMIT 1024

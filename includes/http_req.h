@@ -6,8 +6,9 @@
 #define HTTP_REQ_H
 
 #include "app_state.h"
-#include "http.h"
+#include "http_header.h"
 #include "json.h"
+#include "http_path.h"
 
 typedef enum HttpMethod {
     GET,
@@ -21,12 +22,6 @@ typedef enum HttpMethod {
     CONNECT,
     METHOD_UNKNOWN = -1,
 } HttpMethod;
-
-typedef struct HttpPath {
-    char *raw;
-    char **elements;
-    int elCount;
-} HttpPath;
 
 typedef struct HttpReq {
     HttpMethod method;
@@ -44,9 +39,6 @@ HttpReq newRequest();
 int parseRequestStream(HttpReq *req, TcpStream *stream);
 const char *methodToStr(HttpMethod method);
 HttpMethod strnToMethod(const char *str, int n);
-int parsePath(HttpPath *path, const char *str, int n);
-void freePath(HttpPath *path);
-int pathMatches(HttpPath endpointPath, HttpPath reqPath);
 int reqEq(HttpReq obj1, HttpReq obj2);
 void freeReq(HttpReq *req);
 int isConnectionKeepAlive(HttpReq *req);

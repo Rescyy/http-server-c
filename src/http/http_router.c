@@ -2,12 +2,12 @@
 // Created by Crucerescu Vladislav on 07.03.2025.
 //
 
-#include "../includes/http_router.h"
-#include "../includes/http_resp.h"
-#include "../includes/alloc.h"
+#include <alloc.h>
 #include <assert.h>
-#include <string.h>
+#include <http_resp.h>
+#include <http_router.h>
 #include <stdio.h>
+#include <string.h>
 
 static HttpResp defaultNotFoundCallback(HttpReq _)
 {

@@ -2,10 +2,10 @@
 // Created by Crucerescu Vladislav on 07.03.2025.
 //
 
-#include "../includes/http_resp.h"
-#include "../includes/file_handler.h"
-#include "../includes/alloc.h"
-#include "../includes/utils.h"
+#include <http_resp.h>
+#include <file_handler.h>
+#include <alloc.h>
+#include <utils.h>
 
 #include <string.h>
 #include <stdbool.h>
@@ -15,7 +15,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-#include "../includes/logging.h"
+#include "../../includes/logging.h"
 
 const char *statusToStr(HttpStatus status)
 {

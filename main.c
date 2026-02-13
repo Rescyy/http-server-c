@@ -65,6 +65,7 @@ HttpResp notFoundH(HttpReq)
 
     respBuilderSetFileContent(&builder, "resources/404.html", 0);
     respBuilderAddHeader(&builder, "Content-Type", "text/html");
+    respBuilderSetStatus(&builder, 404);
 
     return respBuild(&builder);
 }

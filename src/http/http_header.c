@@ -2,9 +2,9 @@
 // Created by Crucerescu Vladislav on 07.03.2025.
 //
 
-#include <http.h>
-#include <string.h>
 #include <alloc.h>
+#include <http_header.h>
+#include <string.h>
 #include <utils.h>
 
 #define INITIAL_HEADER_CAP 8
@@ -47,57 +47,9 @@ int parseHeadersStream(HttpHeaders *headers, TcpStream *stream)
     return 0;
 }
 
-int isVersionValid(const char *str, int n)
-{
-    if (str == NULL || n != 8 || strncmp(str, "HTTP/", 5) != 0)
-    {
-        return 0;
-    }
-#define IS_EQUAL(ver)                  \
-    if (strncmp(str + 5, ver, 3) == 0) \
-        return 1;
-    IS_EQUAL("0.9");
-    IS_EQUAL("1.0");
-    IS_EQUAL("1.1");
-    IS_EQUAL("2.0");
-    IS_EQUAL("3.0");
-#undef IS_EQUAL
-    return 0;
-}
-
-#define DEFAULT_VERSION 11
-int getVersionNumber(const char *str, int n)
-{
-    if (str == NULL)
-    {
-        return DEFAULT_VERSION;
-    }
-    if (n != 8 || strncmp(str, "HTTP/", 5) != 0)
-    {
-        return -1;
-    }
-#define IS_EQUAL(ver, num)             \
-    if (strncmp(str + 5, ver, 3) == 0) \
-        return num;
-    IS_EQUAL("0.9", 9);
-    IS_EQUAL("1.0", 10);
-    IS_EQUAL("1.1", 11);
-    IS_EQUAL("2.0", 20);
-    IS_EQUAL("3.0", 30);
-#undef IS_EQUAL
-    return -1;
-}
-
 HttpHeader *findHeader(HttpHeaders *headers, const char *key)
 {
-    for (int i = 0; i < headers->count; i++)
-    {
-        if (strcasecmp(headers->arr[i].key.ptr, key) == 0)
-        {
-            return &headers->arr[i];
-        }
-    }
-    return NULL;
+    return (void*) findKeyValue((void *) headers->arr, headers->count, key);
 }
 
 HttpHeaders emptyHeaders()

@@ -2,12 +2,14 @@
 // Created by Crucerescu Vladislav on 07.03.2025.
 //
 
-#include "../includes/utils.h"
-#include "../includes/alloc.h"
+#include <utils.h>
+#include <alloc.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <time.h>
+
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
 
 /*
  * Find the first occurrence of find in s, where the search is limited to the
@@ -137,4 +139,50 @@ string copyString(string str) {
         .ptr = ptr,
         .length = str.length,
     };
+}
+
+ssize_t stringCompare(string *str1, string *str2) {
+    ssize_t len = MIN(str1->length, str2->length);
+    for (int i = 0; i < len; i++) {
+        ssize_t diff = str1->ptr[i] - str2->ptr[i];
+        if (diff) {
+            return diff;
+        }
+    }
+    return str1->length - str2->length;
+}
+
+char toLower(char c) {
+    if (c >= 'A' && c <= 'Z') {
+        return c + ('A' - 'a');
+    }
+    return c;
+}
+
+ssize_t stringCompareIgnoreCase(string *str1, string *str2) {
+    ssize_t len = MIN(str1->length, str2->length);
+    for (int i = 0; i < len; i++) {
+        ssize_t diff = toLower(str1->ptr[i]) - toLower(str2->ptr[i]);
+        if (diff) {
+            return diff;
+        }
+    }
+    return str1->length - str2->length;
+}
+
+KeyValue *findKeyValue(KeyValue *keyValues, size_t count, const char *key) {
+    if (keyValues == NULL || count == 0) {
+        return NULL;
+    }
+
+    string keyString = (string) {.ptr = key, .length = (ssize_t) strlen(key)};
+
+    for (size_t i = 0; i < count; i++) {
+        KeyValue *kv = &keyValues[i];
+        if (stringCompareIgnoreCase(&kv->key, &keyString) == 0) {
+            return kv;
+        }
+    }
+
+    return NULL;
 }
