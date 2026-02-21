@@ -49,6 +49,8 @@ static const char *logLevelToStr(LogLevel logLevel) {
             return "ERROR";
         case FATAL:
             return "FATAL";
+        case TRACE_:
+            return "TRACE";
         default:
             return "UNKNOWN LOG LEVEL";
     }
@@ -66,6 +68,21 @@ static void _log(LogLevel logLevel, const char *format, va_list args) {
     vprintf(format, args);
     putchar('\n');
     fflush(stdout);
+}
+
+void trace(const char *file, int line, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    DECLARE_CURRENT_TIME(time);
+    SessionState *state = getSessionState();
+    if (state == NULL) {
+        printf("[%s|%s|MAIN|%s:%d] ", logLevelToStr(TRACE_), time, file, line);
+    } else {
+        printf("[%s|%s|%lu.%lu|%s:%d] ", logLevelToStr(TRACE_), time, state->connectionIndex, state->requestIndex, file, line);
+    }
+    vprintf(format, args);
+    putchar('\n');
+    va_end(args);
 }
 
 void debug(const char *format, ...) {
@@ -169,7 +186,7 @@ void logResponse(HttpResp *resp, HttpReq *req)
         JObject reqObj = httpReqToJObject(req);
         JToken reqToken = toJToken_JObject(reqObj);
         JToken timestampToken = toJToken_long(time(NULL));
-        JToken formattedTimeToken = toJToken_cstring(time);
+        JToken formattedTimeToken = toJToken_cstring(currentTime);
         JToken clientIpToken = toJToken_cstring(clientIp);
 
         JObject logObj = _JObject(

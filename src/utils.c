@@ -46,12 +46,24 @@ int strindex(const char *str, const char *find)
     return sub - str;
 }
 
+// returns the index at which it is found, otherwise returns -1 if it is not found
 int strnindex(const char *str, int n, const char *find)
 {
     char *sub = strnstr(str, find, n);
     if (sub == NULL)
         return -1;
     return sub - str;
+}
+
+int strnindexAny(const char *str, int n, const char *find) {
+    for (int i = 0; i < n; i++) {
+        for (const char *c = find; *c != '\0'; c++) {
+            if (*c == str[i]) {
+                return i;
+            }
+        }
+    }
+    return -1;
 }
 
 int isAlpha(char c)
@@ -133,12 +145,24 @@ size_t getCurrentFormattedTime(char *buf, size_t size) {
 }
 
 string copyString(string str) {
-    void *ptr = gcArenaAllocate(str.length + 1, sizeof(char));
+    if (str.length <= 0) {
+        return str;
+    }
+    char *ptr = gcArenaAllocate(str.length + 1, sizeof(char));
     snprintf(ptr, str.length + 1, "%.*s", (int) str.length, str.ptr);
     return (string) {
         .ptr = ptr,
         .length = str.length,
     };
+}
+
+string copyStringFromSlice(const char *ptr, ssize_t len) {
+    if (len <= 0) {
+        return (string) {.ptr = NULL, .length = len};
+    }
+    char *copyPtr = gcArenaAllocate(len + 1, sizeof(char));
+    snprintf(copyPtr, len + 1, "%.*s", (int) len, ptr);
+    return (string) {.ptr = copyPtr, .length = len};
 }
 
 ssize_t stringCompare(string *str1, string *str2) {

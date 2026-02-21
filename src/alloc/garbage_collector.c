@@ -110,13 +110,6 @@ void *gcArenaAllocate(const size_t size, unsigned int align) {
     }
 
     if (arena->tries >= ARENA_MAX_TRIES) {
-        size_t used = 0;
-        size_t cap = 0;
-        for (unsigned int i = 0; i < arena->lastSentFrom; i++) {
-            used += arena->chunks.data[i].size;
-            cap += arena->chunks.data[i].capacity;
-        }
-
         arena->openFrom = arena->lastSentFrom;
         arena->tries = 0;
     }

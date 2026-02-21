@@ -39,9 +39,9 @@ int parseRequestStream(HttpReq *req, TcpStream *stream)
         if (method.length < 0)
         {
             if (method.length != TCP_STREAM_CLOSED && method.length != TCP_STREAM_TIMEOUT) {
-                error("Error Parsing Method: %s", errToStr(method.length));
+                error("Error Parsing Method: %s", errToStr((int) method.length));
             }
-            return method.length;
+            return (int) method.length;
         }
         req->method = strnToMethod(method.ptr, method.length);
 
@@ -54,17 +54,30 @@ int parseRequestStream(HttpReq *req, TcpStream *stream)
 
     /* Parse path */
     {
+        ssize_t queryParameterStart;
         debug("Parsing Path");
         string path = tcpStreamReadUntilSpace(stream, 1024);
         if (path.length < 0)
         {
             if (path.length != TCP_STREAM_CLOSED && path.length != TCP_STREAM_TIMEOUT) {
-                error("Error Parsing Path: %s", errToStr(path.length));
+                error("Error Parsing Path: %s", errToStr((int) path.length));
             }
-            return path.length;
+            return (int) path.length;
         }
-        if (parsePath(&req->path, path.ptr, path.length) == -1)
+        char *pathStart = path.ptr;
+        size_t pathLength = path.length;
+        if (parsePathTrackQueryParameterStart(&req->path, path.ptr, path.length, &queryParameterStart) == -1)
         {
+            return BAD_REQUEST_ERROR;
+        }
+
+        /* Parse query parameters */
+        debug("Parsing Query Parameters");
+        debug(req->path.raw);
+        debug("path count %d; queryStart: %zd", req->path.elCount, queryParameterStart);
+        if (queryParameterStart == -1) {
+            req->query = (HttpQuery){.parameters = NULL, .count = 0};
+        } else if (parseQuery(&req->query, pathStart + queryParameterStart, pathLength - queryParameterStart) == -1) {
             return BAD_REQUEST_ERROR;
         }
     }
@@ -76,11 +89,11 @@ int parseRequestStream(HttpReq *req, TcpStream *stream)
         if (version.length < 0 && version.length != ENTITY_TOO_LARGE_ERROR)
         {
             if (version.length != TCP_STREAM_CLOSED && version.length != TCP_STREAM_TIMEOUT) {
-                error("Error Parsing Version: %s\n", errToStr(version.length));
+                error("Error Parsing Version: %s\n", errToStr((int) version.length));
             }
-            return version.length;
+            return (int) version.length;
         }
-        if (!isVersionValid(version.ptr, version.length) || version.length == ENTITY_TOO_LARGE_ERROR)
+        if (!isVersionValid(version.ptr, (int) version.length) || version.length == ENTITY_TOO_LARGE_ERROR)
         {
             error("Error Parsing Version TOO LARGE\n");
             return UNKNOWN_VERSION;

@@ -58,14 +58,14 @@ void destroyArena(Arena *arena) {
     deallocate(arena);
 }
 
-void *chunkAlloc(ArenaChunk *chunk, size_t size, int align) {
+void *chunkAlloc(ArenaChunk *chunk, size_t size, unsigned int align) {
     chunk->size = ((chunk->size - 1) / align + 1) * align;
     void *returnPtr = (char*) chunk->ptr + chunk->size;
     chunk->size += size;
     return returnPtr;
 }
 
-int chunkHasEnoughSpace(ArenaChunk *chunk, size_t size, int align) {
+int chunkHasEnoughSpace(ArenaChunk *chunk, size_t size, unsigned int align) {
     size_t chunkSize = chunk->size;
     if (chunk->size % align != 0) {
         chunkSize += align - chunk->size % align;

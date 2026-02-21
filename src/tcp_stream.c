@@ -114,7 +114,6 @@ void tcpStreamDrain(TcpStream *stream)
     stream->error = 0;
 }
 
-
 string tcpStreamReadUntilSpace(TcpStream *stream, size_t maxLength)
 {
     const size_t start = stream->cursor;
@@ -156,7 +155,7 @@ string tcpStreamReadUntilSpace(TcpStream *stream, size_t maxLength)
 
 string tcpStreamReadUntilCRLF(TcpStream *stream, size_t maxLength, int ignoreLoneCRLF)
 {
-    int start = stream->cursor;
+    size_t start = stream->cursor;
 
     for (;;)
     {
@@ -171,7 +170,7 @@ string tcpStreamReadUntilCRLF(TcpStream *stream, size_t maxLength, int ignoreLon
             stream->cursor += 2;
             return (string){
                 .ptr = stream->buffer + start,
-                .length = stream->cursor - start - 2,
+                .length = (ssize_t) (stream->cursor - start - 2),
             };
         }
         if (!ignoreLoneCRLF && (stream->buffer[stream->cursor] == '\n' || stream->buffer[stream->cursor] == '\r')) {
@@ -188,7 +187,7 @@ string tcpStreamReadUntilCRLF(TcpStream *stream, size_t maxLength, int ignoreLon
 string tcpStreamReadUntilString(TcpStream *stream, size_t maxLength, const char *subStr, size_t size)
 {
     assert(size > 0);
-    int start = stream->cursor;
+    size_t start = stream->cursor;
     for (;;)
     {
         tcpStreamFill(stream, stream->cursor + size);
@@ -201,11 +200,39 @@ string tcpStreamReadUntilString(TcpStream *stream, size_t maxLength, const char 
             stream->cursor += size;
             return (string){
                 .ptr = stream->buffer + start,
-                .length = stream->cursor - start - size,
+                .length = (ssize_t) (stream->cursor - start - size),
             };
         }
         stream->cursor++;
-        if (stream->cursor - start > maxLength + size)
+        if (stream->cursor - start > maxLength)
+        {
+            return (string){.ptr = NULL, .length = ENTITY_TOO_LARGE_ERROR};
+        }
+    }
+}
+
+string tcpStreamReadUntilAny(TcpStream *stream, size_t maxLength, const char *anyChar) {
+    assert(anyChar != NULL);
+
+    size_t start = stream->cursor;
+
+    for (;;) {
+        tcpStreamFill(stream, stream->cursor + 1);
+        if (stream->error < 0)
+        {
+            return (string){.ptr = NULL, .length = stream->error};
+        }
+        for (const char *c = anyChar; *c != '\0'; c++) {
+            if (stream->buffer[stream->cursor] == *c) {
+                stream->cursor++;
+                return (string){
+                    .ptr = stream->buffer + start,
+                    .length = (ssize_t) (stream->cursor - start - 1),
+                };
+            }
+        }
+        stream->cursor++;
+        if (stream->cursor - start > maxLength)
         {
             return (string){.ptr = NULL, .length = ENTITY_TOO_LARGE_ERROR};
         }

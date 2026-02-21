@@ -6,30 +6,38 @@
 #include <alloc.h>
 #include <utils.h>
 
-int parsePath(HttpPath *path, const char *str, int n)
+int parsePathTrackQueryParameterStart(HttpPath *path, const char *str, size_t n, ssize_t *queryParameterStart)
 {
     int offset, prevOffset = 0;
     path->elCount = 0;
     path->elements = NULL;
     path->raw = gcArenaAllocate(n + 1, alignof(char));
-    snprintf(path->raw, n + 1, "%.*s", n, str);
-    path->raw[n] = '\0';
+    snprintf(path->raw, n + 1, "%.*s", (int) n, str);
     char *element;
     int slashes = 0;
-    for (int i = 0; i < n; i++) {
+    if (queryParameterStart != NULL) {
+        *queryParameterStart = -1;
+    }
+    for (size_t i = 0; i < n; i++) {
+        if (str[i] == '?') {
+            if (queryParameterStart != NULL) {
+                *queryParameterStart = (ssize_t) i + 1;
+            }
+            n = i;
+            break;
+        }
         slashes += str[i] == '/';
     }
     if (str[prevOffset++] != '/') {
         return -1;
     }
     if (n == 1) {
-        path->elements = NULL;
         return 0;
     }
 
     path->elements = gcArenaAllocate(sizeof(char *) * slashes, alignof(char *));
 
-    while ((offset = strnindex(str + prevOffset, n - prevOffset, "/")) != -1)
+    while ((offset = strnindex(str + prevOffset, (int) n - prevOffset, "/")) != -1)
     {
         element = gcArenaAllocate(offset + 1, alignof(char));
         path->elements[path->elCount++] = element;
@@ -50,6 +58,9 @@ int parsePath(HttpPath *path, const char *str, int n)
     return 0;
 }
 
+int parsePath(HttpPath *path, const char *str, size_t n) {
+    return parsePathTrackQueryParameterStart(path, str, n, NULL);
+}
 
 /*
     Matches path to endpoint path of form

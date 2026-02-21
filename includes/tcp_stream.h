@@ -37,5 +37,7 @@ string tcpStreamReadUntilSpace(TcpStream *stream, size_t maxLength);
 string tcpStreamReadUntilCRLF(TcpStream *stream, size_t maxLength, int ignoreLoneCRLF);
 /* Read until string, returns the slice with length not including the substr. */
 string tcpStreamReadUntilString(TcpStream *stream, size_t maxLength, const char *str, size_t size);
+/* Read until find any character from anyChar cString */
+string tcpStreamReadUntilAny(TcpStream *stream, size_t maxLength, const char *anyChar);
 
 #endif //TCP_STREAM_H

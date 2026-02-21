@@ -5,6 +5,7 @@
 #include "includes/app.h"
 #include "includes/alloc.h"
 #include "includes/logging.h"
+#include "includes/http_query.h"
 
 HttpResp helloH(HttpReq);
 HttpResp indexH(HttpReq);
@@ -45,8 +46,15 @@ HttpResp helloH(HttpReq) {
     return respBuild(&builder);
 }
 
-HttpResp indexH(HttpReq)
+HttpResp indexH(HttpReq req)
 {
+    HttpQueryParameter *param = findQueryParameter(&req.query, "hello");
+    TRACE("%zu", req.query.count);
+    TRACE("%s", req.query.parameters[0].key.ptr);
+    TRACE("%p", param);
+    if (param != NULL) {
+        return helloH(req);
+    }
     HttpRespBuilder builder = newRespBuilder();
     respBuilderSetFileContent(&builder, "resources/index.html", 0);
     return respBuild(&builder);

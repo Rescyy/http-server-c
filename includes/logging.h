@@ -19,8 +19,11 @@ typedef enum {
     WARNING,
     ERROR,
     FATAL,
+    TRACE_,
 } LogLevel;
 
+#define TRACE(format, ...) trace(__FILE__, __LINE__, format, __VA_ARGS__)
+void trace(const char *file, int line, const char *format, ...);
 void debug(const char *format, ...);
 void info(const char *format, ...);
 void warning(const char *format, ...);

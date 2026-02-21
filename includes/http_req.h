@@ -9,6 +9,7 @@
 #include "http_header.h"
 #include "json.h"
 #include "http_path.h"
+#include "http_query.h"
 
 typedef enum HttpMethod {
     GET,
@@ -26,6 +27,7 @@ typedef enum HttpMethod {
 typedef struct HttpReq {
     HttpMethod method;
     HttpPath path;
+    HttpQuery query;
     char *version;
     HttpHeaders headers;
     void *content;
