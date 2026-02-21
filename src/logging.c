@@ -49,7 +49,7 @@ static const char *logLevelToStr(LogLevel logLevel) {
             return "ERROR";
         case FATAL:
             return "FATAL";
-        case TRACE_:
+        case TRACE_LOGLEVEL:
             return "TRACE";
         default:
             return "UNKNOWN LOG LEVEL";
@@ -76,9 +76,9 @@ void trace(const char *file, int line, const char *format, ...) {
     DECLARE_CURRENT_TIME(time);
     SessionState *state = getSessionState();
     if (state == NULL) {
-        printf("[%s|%s|MAIN|%s:%d] ", logLevelToStr(TRACE_), time, file, line);
+        printf("[%s|%s|MAIN|%s:%d] ", logLevelToStr(TRACE_LOGLEVEL), time, file, line);
     } else {
-        printf("[%s|%s|%lu.%lu|%s:%d] ", logLevelToStr(TRACE_), time, state->connectionIndex, state->requestIndex, file, line);
+        printf("[%s|%s|%lu.%lu|%s:%d] ", logLevelToStr(TRACE_LOGLEVEL), time, state->connectionIndex, state->requestIndex, file, line);
     }
     vprintf(format, args);
     putchar('\n');
@@ -161,6 +161,7 @@ void logResponse(HttpResp *resp, HttpReq *req)
     char *clientIp = req->appState->clientSocket.ip;
     unsigned long connectionIndex = req->appState->connectionIndex;
     unsigned long requestIndex = req->appState->requestIndex;
+    TRACE("%s", "Logging response stdout");
     if (logFlags & PRINT_LOG)
     {
         printf(CONNECTION_NAME_FORMAT " " THREAD_NAME_FORMAT " %-16s %-7s %-50s | %d %s\n",
@@ -174,6 +175,7 @@ void logResponse(HttpResp *resp, HttpReq *req)
             statusToStr(resp->status)
         );
     }
+    TRACE("%s", "Logging response json");
     if (logFlags & JSON_LOG && jsonLogFilePath != NULL) {
         FILE *file = fopen(jsonLogFilePath, "a");
         if (file == NULL) {
@@ -183,7 +185,9 @@ void logResponse(HttpResp *resp, HttpReq *req)
 
         DECLARE_CURRENT_TIME(currentTime);
 
+        TRACE("%s", "Building req object");
         JObject reqObj = httpReqToJObject(req);
+        TRACE("%s", "Req object built");
         JToken reqToken = toJToken_JObject(reqObj);
         JToken timestampToken = toJToken_long(time(NULL));
         JToken formattedTimeToken = toJToken_cstring(currentTime);
@@ -197,12 +201,14 @@ void logResponse(HttpResp *resp, HttpReq *req)
         );
         JToken logToken = toJToken_JObject(logObj);
 
+        TRACE("%s", "Serializing json");
         unsigned int size = serializeJson(logToken, &buffer, 4);
         fwrite(buffer, size, 1, file);
         char entrySeparator[] = ",\n";
         fwrite(entrySeparator, strlen(entrySeparator), 1, file);
         fclose(file);
     }
+    TRACE("%s", "Logging response logfile");
     if (logFlags & FILE_LOG && logFilePath != NULL) {
         FILE *file = fopen(logFilePath, "a");
         if (file == NULL) {

@@ -13,6 +13,7 @@ typedef HttpResp (*HttpReqHandler)(HttpReq);
 typedef struct HttpEndpoint {
     HttpPath path;
     HttpReqHandler handler;
+    const char* raw;
 } HttpEndpoint;
 
 typedef struct HttpRouter {
@@ -22,8 +23,8 @@ typedef struct HttpRouter {
     int capacity;
 } HttpRouter;
 
-HttpResp routeReq(HttpRouter router, HttpReq req);
-HttpEndpoint newEndpoint(char *str, HttpReqHandler handler);
+HttpResp routeReq(HttpRouter *router, HttpReq *req);
+HttpEndpoint newEndpoint(const char *str, HttpReqHandler handler);
 HttpRouter newRouter(HttpEndpoint *endpoints, int length);
 HttpRouter emptyRouter();
 void routerAddEndpoint(HttpRouter *router, HttpEndpoint endpoint);

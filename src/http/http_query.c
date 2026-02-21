@@ -5,48 +5,53 @@
 #include <http_query.h>
 #include <alloc.h>
 
+#include "logging.h"
+
 int parseQuery(HttpQuery *query, const char *str, size_t len) {
+
+    TRACE("%zu %.*s", len, (int) len, str);
 
     int ampersands = 0;
     for (size_t i = 0; i < len; i++) {
         ampersands += str[i] == '&';
     }
 
-    query->count = ampersands + 1;
-    query->parameters = gcArenaAllocate(sizeof(HttpQueryParameter) * query->count, alignof(HttpQueryParameter));
+    query->count = 0;
+    query->parameters = gcArenaAllocate(sizeof(HttpQueryParameter) * (ampersands + 1), alignof(HttpQueryParameter));
 
     size_t prevOffset = 0;
     for (int i = 0; i < ampersands + 1; i++) {
 
-        ssize_t ampersandOffset;
+        ssize_t parameterEnd;
         if (i == ampersands) {
-            ampersandOffset = (ssize_t) len;
+            parameterEnd = (ssize_t) (len - prevOffset);
         } else {
-            ampersandOffset = strnindex(str + prevOffset, (int) (len - prevOffset), "&");
-            if (ampersandOffset == 0) {
-                return -1;
+            parameterEnd = strnindex(str + prevOffset, (int) (len - prevOffset), "&");
+            if (parameterEnd == 0) {
+                goto loop_end;
             }
         }
 
-        ssize_t equalOffset = strnindex(str + prevOffset, (int) ampersandOffset, "=");
+        ssize_t equalOffset = strnindex(str + prevOffset, (int) parameterEnd, "=");
         if (equalOffset == 0) {
-            return -1;
+            goto loop_end;
         }
 
-        HttpQueryParameter *param = &query->parameters[i];
+        HttpQueryParameter *param = &query->parameters[query->count++];
         string *key = &param->key;
         string *value = &param->value;
 
         if (equalOffset == -1) {
-            *key = copyStringFromSlice(str + prevOffset, ampersandOffset);
+            *key = copyStringFromSlice(str + prevOffset, parameterEnd);
             *value = copyStringFromSlice(NULL, -1);
         } else {
             *key = copyStringFromSlice(str + prevOffset, equalOffset);
             *value = copyStringFromSlice(str + prevOffset + equalOffset + 1,
-                ampersandOffset - equalOffset - 1);
+                parameterEnd - equalOffset - 1);
         }
 
-        prevOffset += ampersandOffset + 1;
+        loop_end:
+        prevOffset += parameterEnd + 1;
     }
 
     return 0;

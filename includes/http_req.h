@@ -19,7 +19,7 @@ typedef enum HttpMethod {
     DELETE,
     HEAD,
     OPTIONS,
-    TRACE,
+    TRACE_,
     CONNECT,
     METHOD_UNKNOWN = -1,
 } HttpMethod;

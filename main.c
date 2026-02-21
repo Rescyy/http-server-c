@@ -43,16 +43,18 @@ int main(int argc, char **argv)
 
 HttpResp helloH(HttpReq) {
     HttpRespBuilder builder = newRespBuilder();
+    TRACE("%s", "helloH");
     return respBuild(&builder);
 }
 
 HttpResp indexH(HttpReq req)
 {
-    HttpQueryParameter *param = findQueryParameter(&req.query, "hello");
-    TRACE("%zu", req.query.count);
-    TRACE("%s", req.query.parameters[0].key.ptr);
-    TRACE("%p", param);
-    if (param != NULL) {
+    TRACE("%s", "Finding params");
+    HttpQueryParameter *helloParam = findQueryParameter(&req.query, "hello");
+    HttpQueryParameter *idParam = findQueryParameter(&req.query, "id");
+
+    TRACE("%s", "checking conditions");
+    if (helloParam != NULL || (idParam != NULL && strcmp(idParam->value.ptr, "1") == 0)) {
         return helloH(req);
     }
     HttpRespBuilder builder = newRespBuilder();

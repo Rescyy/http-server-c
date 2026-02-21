@@ -15,6 +15,6 @@ typedef struct HttpPath {
 
 int parsePathTrackQueryParameterStart(HttpPath *path, const char *str, size_t n, ssize_t *queryParameterStart);
 int parsePath(HttpPath *path, const char *str, size_t n);
-int pathMatches(HttpPath endpointPath, HttpPath reqPath);
+int pathMatches(HttpPath *endpointPath, HttpPath *reqPath);
 
 #endif //HTTPSERVERC_HTTP_PATH_H

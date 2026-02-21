@@ -636,6 +636,11 @@ JToken toJToken_string(ARRAY_T(char) string) {
 }
 
 JToken toJToken_cstring(const char *cstring) {
+    if (cstring == NULL) {
+        return (JToken) {
+            .type = JSON_NULL,
+        };
+    }
     return (JToken) {
         .literal = (JValue) {.string = (JString){
             .value = cstring,
@@ -682,7 +687,9 @@ JObject toJObject_JProperties(const unsigned int count, ...) {
         .properties = gcArenaAllocate(sizeof(JProperty) * count, alignof(JProperty)),
         .count = count,
     };
+    TRACE("%s", "toJObject_JProperties");
     for (unsigned int i = 0; i < count; i++) {
+        TRACE("%s %d", "toJObject_JProperties", i);
         object.properties[i] = va_arg(args, JProperty);
     }
     va_end(args);

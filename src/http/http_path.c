@@ -6,6 +6,8 @@
 #include <alloc.h>
 #include <utils.h>
 
+#include "logging.h"
+
 int parsePathTrackQueryParameterStart(HttpPath *path, const char *str, size_t n, ssize_t *queryParameterStart)
 {
     int offset, prevOffset = 0;
@@ -66,27 +68,29 @@ int parsePath(HttpPath *path, const char *str, size_t n) {
     Matches path to endpoint path of form
     /object/<str>/<int> to match /object/hi/123
 */
-int pathMatches(HttpPath endpointPath, HttpPath reqPath)
+int pathMatches(HttpPath *endpointPath, HttpPath *reqPath)
 {
-    if (endpointPath.elCount != reqPath.elCount)
+    TRACE("%s", "pathMatches begin");
+    if (endpointPath->elCount != reqPath->elCount)
     {
         return 0;
     }
-    for (int i = 0; i < endpointPath.elCount; i++)
+    for (int i = 0; i < endpointPath->elCount; i++)
     {
-        if (strcmp(endpointPath.elements[i], "<str>") == 0)
+        TRACE("pathMatches i=%d", i);
+        if (strcmp(endpointPath->elements[i], "<str>") == 0)
         {
             continue;
         }
-        else if (strcmp(endpointPath.elements[i], "<int>") == 0)
+        else if (strcmp(endpointPath->elements[i], "<int>") == 0)
         {
-            long result = strtol(reqPath.elements[i], NULL, 10);
-            if (result == 0 && strcmp(reqPath.elements[i], "0") != 0)
+            long result = strtol(reqPath->elements[i], NULL, 10);
+            if (result == 0 && strcmp(reqPath->elements[i], "0") != 0)
             {
                 return 0;
             }
         }
-        else if (strcmp(endpointPath.elements[i], reqPath.elements[i]) != 0)
+        else if (strcmp(endpointPath->elements[i], reqPath->elements[i]) != 0)
         {
             return 0;
         }

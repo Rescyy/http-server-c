@@ -73,8 +73,7 @@ int parseRequestStream(HttpReq *req, TcpStream *stream)
 
         /* Parse query parameters */
         debug("Parsing Query Parameters");
-        debug(req->path.raw);
-        debug("path count %d; queryStart: %zd", req->path.elCount, queryParameterStart);
+        TRACE("path count %d; queryStart: %zd", req->path.elCount, queryParameterStart);
         if (queryParameterStart == -1) {
             req->query = (HttpQuery){.parameters = NULL, .count = 0};
         } else if (parseQuery(&req->query, pathStart + queryParameterStart, pathLength - queryParameterStart) == -1) {
@@ -86,6 +85,7 @@ int parseRequestStream(HttpReq *req, TcpStream *stream)
     {
         debug("Parsing Version");
         string version = tcpStreamReadUntilCRLF(stream, 8, 0);
+        TRACE("versionLength: %zd", version.length);
         if (version.length < 0 && version.length != ENTITY_TOO_LARGE_ERROR)
         {
             if (version.length != TCP_STREAM_CLOSED && version.length != TCP_STREAM_TIMEOUT) {
@@ -98,8 +98,8 @@ int parseRequestStream(HttpReq *req, TcpStream *stream)
             error("Error Parsing Version TOO LARGE\n");
             return UNKNOWN_VERSION;
         }
-        req->version = gcArenaAllocate(version.length + 1, alignof(char));
-        strncpy(req->version, version.ptr, version.length);
+        req->version = gcArenaAllocate(9, alignof(char));
+        snprintf(req->version, 9, "%.*s", 8, version.ptr);
     }
 
     /* Parse headers */
@@ -162,39 +162,29 @@ long findContentLength(HttpHeaders *headers)
 
 const char *methodToStr(HttpMethod method)
 {
-    static const char get[] = "GET";
-    static const char post[] = "POST";
-    static const char patch[] = "PATCH";
-    static const char put[] = "PUT";
-    static const char delete[] = "DELETE";
-    static const char head[] = "HEAD";
-    static const char options[] = "OPTIONS";
-    static const char trace[] = "TRACE";
-    static const char connect[] = "CONNECT";
-    static const char unknown[] = "UNK";
-
+    TRACE("%s", "methodToStr");
     switch (method)
     {
         case GET:
-            return get;
+            return "GET";
         case POST:
-            return post;
+            return "POST";
         case PATCH:
-            return patch;
+            return "PATCH";
         case PUT:
-            return put;
+            return "PUT";
         case DELETE:
-            return delete;
+            return "DELETE";
         case HEAD:
-            return head;
+            return "HEAD";
         case OPTIONS:
-            return options;
-        case TRACE:
-            return trace;
+            return "OPTIONS";
+        case TRACE_:
+            return "TRACE";
         case CONNECT:
-            return connect;
+            return "CONNECT";
         default:
-            return unknown;
+            return "UNK";
     }
 }
 
@@ -212,7 +202,7 @@ HttpMethod strnToMethod(const char *str, int n)
     IS_METHOD(DELETE);
     IS_METHOD(HEAD);
     IS_METHOD(OPTIONS);
-    IS_METHOD(TRACE);
+    IS_METHOD(TRACE_);
     IS_METHOD(CONNECT);
     return METHOD_UNKNOWN;
 #undef IS_METHOD
@@ -241,8 +231,10 @@ JObject httpReqToJObject(HttpReq *req) {
     static const char headersKey[] = "headers";
     static const char contentKey[] = "content";
 
-    char *path = malloc(1024);
-    strncpy(path, req->path.raw, 1024);
+    char *path = gcArenaAllocate(1024, alignof(char));
+    TRACE("%s", "httpReqToObject");
+    snprintf(path, 1024, "%.*s", 1024, req->path.raw);
+    TRACE("%s", "httpReqToObject");
     JObject headersObj = {
         .properties = gcArenaAllocate(sizeof(JProperty) * req->headers.count, alignof(JProperty)),
         .count = req->headers.count
@@ -251,6 +243,7 @@ JObject httpReqToJObject(HttpReq *req) {
     for (int i = 0; i < req->headers.count; i++) {
         headersObj.properties[i] = _JProperty(headers[i].key.ptr, toJToken_cstring(headers[i].value.ptr));
     }
+    TRACE("%s", "httpReqToObject");
 
     JToken contentToken;
     if (req->content == NULL) {
@@ -258,7 +251,11 @@ JObject httpReqToJObject(HttpReq *req) {
     } else {
         contentToken = toJToken_cstring(req->content);
     }
+    TRACE("%s", "httpReqToObject");
 
+    TRACE("%p", path);
+    TRACE("%s", methodToStr(req->method));
+    TRACE("%s", req->version);
     JObject reqObject = _JObject(
         _JProperty(methodKey, toJToken_cstring(methodToStr(req->method))),
         _JProperty(pathKey, toJToken_cstring(path)),
@@ -266,6 +263,7 @@ JObject httpReqToJObject(HttpReq *req) {
         _JProperty(headersKey, toJToken_JObject(headersObj)),
         _JProperty(contentKey, contentToken)
     );
+    TRACE("%s", "httpReqToObject");
 
     return reqObject;
 }

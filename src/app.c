@@ -132,8 +132,9 @@ int handleRequest(SessionState *state, TcpStream *stream) {
     int connectionKeepAlive = isConnectionKeepAlive(&request);
 
     debug("Routing request");
-    resp = routeReq(router, request);
+    resp = routeReq(&router, &request);
 
+    debug("Logging Response");
     logResponse(&resp, &request);
 
     WriteResult sendResult = sendResponse(&resp, &state->clientSocket);
@@ -143,12 +144,13 @@ int handleRequest(SessionState *state, TcpStream *stream) {
             break;
         case WRITE_CLOSED:
             warning("Peer closed connection while sending");
-            break;
+            return 0;
         case WRITE_TIMEOUT:
             warning("Timeout while sending");
-            break;
+            return 0;
         default:
             error("Failed sending response");
+            return 0;
     }
 
     return connectionKeepAlive;
@@ -156,7 +158,6 @@ int handleRequest(SessionState *state, TcpStream *stream) {
 
 /*
  * Returns 1 if should close connection.
- * Returns 2 if should respond with error.
  */
 int handleError(int result, TcpSocket *client, HttpReq *request) {
     HttpResp resp;
@@ -205,11 +206,12 @@ int handleError(int result, TcpSocket *client, HttpReq *request) {
     }
     logResponse(&resp, request);
     sendResponse(&resp, client);
-    return 2;
+    return 1;
 }
 
 WriteResult sendResponse(HttpResp *resp, TcpSocket *client) {
     char *buffer;
+    TRACE("%s", "Building response");
     size_t responseSize = buildRespStringUntilContent(resp, &buffer);
 
     WriteResult respResult = transmit(client, buffer, responseSize);

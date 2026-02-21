@@ -9,6 +9,8 @@
 #include <stdint.h>
 #include <time.h>
 
+#include "logging.h"
+
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 
 /*
@@ -157,6 +159,7 @@ string copyString(string str) {
 }
 
 string copyStringFromSlice(const char *ptr, ssize_t len) {
+    TRACE("len %zd %.*s", len, (int) len, ptr);
     if (len <= 0) {
         return (string) {.ptr = NULL, .length = len};
     }
@@ -184,8 +187,13 @@ char toLower(char c) {
 }
 
 ssize_t stringCompareIgnoreCase(string *str1, string *str2) {
+    if (str1 == NULL || str2 == NULL) {
+        return 0;
+    }
+    TRACE("stringCompareIgnoreCase %s %s", str1->ptr, str2->ptr);
     ssize_t len = MIN(str1->length, str2->length);
     for (int i = 0; i < len; i++) {
+        TRACE("stringCompareIgnoreCase i=%d", i);
         ssize_t diff = toLower(str1->ptr[i]) - toLower(str2->ptr[i]);
         if (diff) {
             return diff;
@@ -201,8 +209,10 @@ KeyValue *findKeyValue(KeyValue *keyValues, size_t count, const char *key) {
 
     string keyString = (string) {.ptr = key, .length = (ssize_t) strlen(key)};
 
+    TRACE("findKeyValue count=%zu", count);
     for (size_t i = 0; i < count; i++) {
         KeyValue *kv = &keyValues[i];
+        TRACE("findKeyValue i=%d kv=%p", i, kv);
         if (stringCompareIgnoreCase(&kv->key, &keyString) == 0) {
             return kv;
         }

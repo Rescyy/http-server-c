@@ -9,7 +9,9 @@
 #include <stdio.h>
 #include <string.h>
 
-static HttpResp defaultNotFoundCallback(HttpReq _)
+#include "logging.h"
+
+static HttpResp defaultNotFoundCallback(HttpReq)
 {
     HttpRespBuilder builder = newRespBuilder();
     respBuilderSetStatus(&builder, NOT_FOUND);
@@ -17,7 +19,7 @@ static HttpResp defaultNotFoundCallback(HttpReq _)
     return resp;
 }
 
-HttpResp htmlNotFoundCallback(HttpReq _) {
+HttpResp htmlNotFoundCallback(HttpReq) {
     HttpRespBuilder builder = newRespBuilder();
     static const char notFoundContent[] = "<!DOCTYPE html><body><head>NOT FOUND 404</head></body>";
     respBuilderSetStatus(&builder, NOT_FOUND);
@@ -27,25 +29,31 @@ HttpResp htmlNotFoundCallback(HttpReq _) {
     return resp;
 }
 
-HttpResp routeReq(HttpRouter router, HttpReq req)
+HttpResp routeReq(HttpRouter *router, HttpReq *req)
 {
-    for (int i = 0; i < router.length; i++)
+    for (int i = 0; i < router->length; i++)
     {
-        HttpEndpoint endpoint = router.endpoints[i];
-        if (pathMatches(endpoint.path, req.path))
+        HttpEndpoint *endpoint = &router->endpoints[i];
+        TRACE("routeReq i=%d", i);
+        if (pathMatches(&endpoint->path, &req->path))
         {
-            return endpoint.handler(req);
+            TRACE("routeReq calling handler %p %s", endpoint->handler, endpoint->raw);
+            return endpoint->handler(*req);
         }
     }
-    return router.notFoundCallback(req);
+    return router->notFoundCallback(*req);
 }
 
-HttpEndpoint newEndpoint(char *str, HttpReqHandler handler)
+HttpEndpoint newEndpoint(const char *str, HttpReqHandler handler)
 {
     HttpPath path;
     int status = parsePath(&path, str, strlen(str));
     assert(status != -1 && "Programmer error: Invalid path passed");
-    return (HttpEndpoint){path, handler};
+    return (HttpEndpoint) {
+        .path = path,
+        .handler = handler,
+        .raw = str,
+    };
 }
 
 /*
