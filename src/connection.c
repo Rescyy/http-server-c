@@ -170,7 +170,10 @@ TcpSocket socketConnect(const char *host, const port_t port)
 
 void closeSocket(TcpSocket *sock)
 {
-    close(sock->fd);
+    if (!sock->closed) {
+        sock->closed = 1;
+        close(sock->fd);
+    }
 }
 
 ReadEnum canRead(int fd, int timeoutMs) {

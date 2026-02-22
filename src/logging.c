@@ -2,8 +2,9 @@
 // Created by Crucerescu Vladislav on 13.08.2025.
 //
 
-#include "../includes/logging.h"
-#include "../includes/utils.h"
+
+#include <logging.h>
+#include <utils.h>
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -37,6 +38,7 @@ static const char *logFilePath = NULL;
 static const char *jsonLogFilePath = NULL;
 static int logFlags = PRINT_LOG;
 
+#if LOG_BY_LEVEL
 static const char *logLevelToStr(LogLevel logLevel) {
     switch (logLevel) {
         case DEBUG:
@@ -68,21 +70,6 @@ static void _log(LogLevel logLevel, const char *format, va_list args) {
     vprintf(format, args);
     putchar('\n');
     fflush(stdout);
-}
-
-void trace(const char *file, int line, const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    DECLARE_CURRENT_TIME(time);
-    SessionState *state = getSessionState();
-    if (state == NULL) {
-        printf("[%s|%s|MAIN|%s:%d] ", logLevelToStr(TRACE_LOGLEVEL), time, file, line);
-    } else {
-        printf("[%s|%s|%lu.%lu|%s:%d] ", logLevelToStr(TRACE_LOGLEVEL), time, state->connectionIndex, state->requestIndex, file, line);
-    }
-    vprintf(format, args);
-    putchar('\n');
-    va_end(args);
 }
 
 void debug(const char *format, ...) {
@@ -119,12 +106,45 @@ void fatal(const char *format, ...) {
     _log(FATAL, format, args);
     va_end(args);
 }
+#else
+
+void debug(const char *format, ...) {}
+void info(const char *format, ...) {}
+void warning(const char *format, ...) {}
+void error(const char *format, ...) {}
+void fatal(const char *format, ...) {}
+
+#endif
+
+#if LOG_TRACES
+
+void trace(const char *file, int line, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    DECLARE_CURRENT_TIME(time);
+    SessionState *state = getSessionState();
+    if (state == NULL) {
+        printf("[%s|%s|MAIN|%s:%d] ", logLevelToStr(TRACE_LOGLEVEL), time, file, line);
+    } else {
+        printf("[%s|%s|%lu.%lu|%s:%d] ", logLevelToStr(TRACE_LOGLEVEL), time, state->connectionIndex, state->requestIndex, file, line);
+    }
+    vprintf(format, args);
+    putchar('\n');
+    va_end(args);
+}
+
+#else
+
+void trace(const char *file, int line, const char *format, ...);
+
+#endif
 
 /*
  * Sets the logging file path, sets the FILE_LOG log flag
  */
 void setLogFile(const char *path)
 {
+#if LOG_TXT_FILE
     FILE *file = fopen(path, "a");
     if (file == NULL) {
         fprintf(stderr, "Could not open log file %s\n", path);
@@ -133,9 +153,11 @@ void setLogFile(const char *path)
     fclose(file);
     logFilePath = path;
     logFlags |= FILE_LOG;
+#endif
 }
 
 void setJsonLogFile(const char *path) {
+#if LOG_JSON_FILE
     FILE *file = fopen(path, "a");
     if (file == NULL) {
         fprintf(stderr, "Could not open log file %s\n", path);
@@ -144,10 +166,7 @@ void setJsonLogFile(const char *path) {
     fclose(file);
     jsonLogFilePath = path;
     logFlags |= JSON_LOG;
-}
-
-void setSocketLogFile(const char *path) {
-
+#endif
 }
 
 void setLogFlags(int flags)
@@ -162,6 +181,7 @@ void logResponse(HttpResp *resp, HttpReq *req)
     unsigned long connectionIndex = req->appState->connectionIndex;
     unsigned long requestIndex = req->appState->requestIndex;
     TRACE("%s", "Logging response stdout");
+#if LOG_REQUESTS
     if (logFlags & PRINT_LOG)
     {
         printf(CONNECTION_NAME_FORMAT " " THREAD_NAME_FORMAT " %-16s %-7s %-50s | %d %s\n",
@@ -175,6 +195,8 @@ void logResponse(HttpResp *resp, HttpReq *req)
             statusToStr(resp->status)
         );
     }
+#endif
+#if LOG_JSON_FILE
     TRACE("%s", "Logging response json");
     if (logFlags & JSON_LOG && jsonLogFilePath != NULL) {
         FILE *file = fopen(jsonLogFilePath, "a");
@@ -208,6 +230,8 @@ void logResponse(HttpResp *resp, HttpReq *req)
         fwrite(entrySeparator, strlen(entrySeparator), 1, file);
         fclose(file);
     }
+#endif
+#if LOG_TXT_FILE
     TRACE("%s", "Logging response logfile");
     if (logFlags & FILE_LOG && logFilePath != NULL) {
         FILE *file = fopen(logFilePath, "a");
@@ -226,20 +250,26 @@ void logResponse(HttpResp *resp, HttpReq *req)
         );
         fclose(file);
     }
+#endif
 }
 
 void logErrorResponse(HttpReq *req, const char *error)
 {
-    char path[1024];
-    strncpy(path, req->path.raw, 1024);
     unsigned long threadId = pthread_self();
     char *clientIp = req->appState->clientSocket.ip;
     unsigned long connectionIndex = req->appState->connectionIndex;
     unsigned long requestIndex = req->appState->requestIndex;
+#if LOG_BY_LEVEL || LOG_TXT_FILE
+    char path[1024];
+    strncpy(path, req->path.raw, 1024);
+#endif
+#if LOG_BY_LEVEL
     if (logFlags & PRINT_LOG)
     {
         printf(CONNECTION_NAME_FORMAT " " THREAD_NAME_FORMAT " %-16s %-7s %-50s | Error: %s\n", connectionIndex, requestIndex, THREAD_NAME_ARGS(threadId), clientIp, methodToStr(req->method), path, error);
     }
+#endif
+#if LOG_TXT_FILE
     if (logFlags & FILE_LOG)
     {
         FILE *file = fopen(logFilePath, "a");
@@ -250,11 +280,5 @@ void logErrorResponse(HttpReq *req, const char *error)
         fprintf(file, CONNECTION_NAME_FORMAT " Thread %ld %-16s %-7s %-50s | Error: %s\n", connectionIndex, requestIndex, threadId, clientIp, methodToStr(req->method), path, error);
         fclose(file);
     }
-}
-
-void printError(HttpReq *req, TcpSocket *client) {
-    unsigned long threadId = pthread_self();
-    unsigned long connectionIndex = req->appState->connectionIndex;
-    unsigned long requestIndex = req->appState->requestIndex;
-    fprintf(stderr, CONNECTION_NAME_FORMAT " " THREAD_NAME_FORMAT " %-16s %s\n", connectionIndex, requestIndex, THREAD_NAME_ARGS(threadId), client->ip, strerror(errno));
+#endif
 }

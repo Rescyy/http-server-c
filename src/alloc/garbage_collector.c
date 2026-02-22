@@ -33,6 +33,10 @@ static void destroyEntriesWrapper(void *ptr) {
 }
 
 void gcTrack() {
+    gcTrackWithStackArena(NULL, 0);
+}
+
+void gcTrackWithStackArena(void *stackArenaChunk, size_t chunkSize) {
     AllocEntries *entries = allocate(sizeof(AllocEntries));
     *entries = (AllocEntries) {
         .arr = ARRAY_WITH_CAPACITY(AllocEntry, ENTRIES_PAGE_CAP),
@@ -44,11 +48,17 @@ void gcTrack() {
     *arena = (Arena) {
         .chunks = ARRAY_NEW(ArenaChunk),
         .openFrom = 0,
+        .firstStackAlloc = stackArenaChunk != NULL,
     };
-    ARRAY_PUSH(ArenaChunk, &arena->chunks, newArenaChunk(ARENA_PAGE_CAP));
-    ARRAY_T(Destructor) *destructors = allocate(SIZEOF_ARRAY);
+    if (stackArenaChunk != NULL) {
+        ArenaChunk chunk = {.ptr = stackArenaChunk, .size = 0, .capacity = chunkSize};
+        ARRAY_PUSH(ArenaChunk, &arena->chunks, chunk);
+    } else {
+        ARRAY_PUSH(ArenaChunk, &arena->chunks, newArenaChunk(ARENA_PAGE_CAP));
+    }
     setArena(arena);
 
+    ARRAY_T(Destructor) *destructors = allocate(SIZEOF_ARRAY);
     *destructors = ARRAY_NEW(Destructor);
     setDestructors(destructors);
 

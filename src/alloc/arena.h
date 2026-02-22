@@ -24,6 +24,7 @@ typedef struct {
     unsigned int openFrom;
     unsigned int lastSentFrom;
     unsigned int tries;
+    int firstStackAlloc;
 } Arena;
 
 void cleanupArena(Arena *arena);

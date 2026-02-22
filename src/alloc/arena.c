@@ -51,7 +51,7 @@ ArenaChunk newArenaChunk(size_t capacity) {
 
 void destroyArena(Arena *arena) {
     debug("Cleaning up Arena %u Chunks", arena->chunks.length);
-    for (size_t i = 0; i < arena->chunks.length; i++) {
+    for (size_t i = arena->firstStackAlloc ? 1 : 0; i < arena->chunks.length; i++) {
         deallocate(arena->chunks.data[i].ptr);
     }
     deallocate(arena->chunks.data);

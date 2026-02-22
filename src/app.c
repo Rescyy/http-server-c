@@ -53,8 +53,6 @@ void initApp() {
     setupSignalHandlers();
 }
 
-
-
 void startApp(char *port) {
     initApp();
 
@@ -89,16 +87,18 @@ void startApp(char *port) {
 }
 
 void *handleConnectionThreadCall(void *arg) {
-    setSessionState(arg);
     handleConnection(arg);
     pthread_exit(NULL);
     return NULL;
 }
 
 #define BUFFER_SIZE 3072UL
+#define STACK_ARENA_CHUNK_SIZE 4096UL
 
 void handleConnection(SessionState *appState) {
-    gcTrack();
+    setSessionState(appState);
+    char stackArenaChunk[STACK_ARENA_CHUNK_SIZE];
+    gcTrackWithStackArena(stackArenaChunk, STACK_ARENA_CHUNK_SIZE);
     TcpStream *stream = newTcpStream(&appState->clientSocket);
     attachDestructor((destructor_t) freeTcpStream, stream);
     while (1) {
@@ -254,7 +254,6 @@ WriteResult sendFile(HttpResp *resp, TcpSocket *client) {
     while (remaining > 0) {
         WriteEnum writable = canWrite(client->fd, 10 * 1000);
         if (writable != WRITE_OK) {
-            close(fd);
             return (WriteResult) {.result = writable, .sent = offset};
         }
         off_t tempOffset = offset;
@@ -262,12 +261,10 @@ WriteResult sendFile(HttpResp *resp, TcpSocket *client) {
         debug("sendfile(%d, %d, %ld, %zu) returned %zd and changed offset to %ld", client->fd, fd, tempOffset, remaining, sent, offset);
         if (sent <= 0) {
             perror("sendfile");
-            close(fd);
             return (WriteResult) {.result = WRITE_SENDFILE_ERROR, .sent = offset};
         }
         remaining -= sent;
     }
-    close(fd);
     return (WriteResult) {.result = WRITE_OK, .sent = resp->contentLength};
 }
 

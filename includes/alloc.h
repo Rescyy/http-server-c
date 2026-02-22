@@ -25,6 +25,10 @@ void gcInit();
 // Call once per thread
 void gcTrack();
 
+// Initialises allocations tracking of the gc allocation functions, first chunk is stack allocated
+// Call once per thread
+void gcTrackWithStackArena(void *stackArenaChunk, size_t chunkSize);
+
 // cleans up tracked gc allocations
 void gcCleanup();
 

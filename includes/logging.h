@@ -5,6 +5,18 @@
 #ifndef LOGGING_H
 #define LOGGING_H
 
+#define LOG_REQUESTS 1
+#define LOG_BY_LEVEL 1
+#define LOG_TXT_FILE 0
+#define LOG_JSON_FILE 0
+#define LOG_TRACES 0
+
+#if LOG_TRACES
+#define TRACE(format, ...) trace(__FILE__, __LINE__, format, __VA_ARGS__)
+#else
+#define TRACE(_,...)
+#endif
+
 #include "connection.h"
 #include "http_req.h"
 #include "http_resp.h"
@@ -23,7 +35,6 @@ typedef enum {
 } LogLevel;
 
 void trace(const char *file, int line, const char *format, ...);
-#define TRACE(format, ...) trace(__FILE__, __LINE__, format, __VA_ARGS__)
 void debug(const char *format, ...);
 void info(const char *format, ...);
 void warning(const char *format, ...);
@@ -35,7 +46,6 @@ void setSocketLogFile(const char *path);
 void setLogFlags(int flags);
 void logResponse(HttpResp *resp, HttpReq *req);
 void logErrorResponse(HttpReq *req, const char *error);
-void printError(HttpReq *req, TcpSocket *client);
 void initLogging();
 
 #endif //LOGGING_H

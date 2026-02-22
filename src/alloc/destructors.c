@@ -31,7 +31,7 @@ ARRAY_T(Destructor) *getDestructors() {
 
 void invokeDestructors(ARRAY_T(Destructor) *destructors) {
     debug("Invoking destructors %u", destructors->length);
-    for (int i = destructors->length - 1; i >= 0; i--) {
+    for (int i = (int) destructors->length - 1; i >= 0; i--) {
         destructors->data[i].func(destructors->data[i].ptr);
     }
     deallocate(destructors->data);
